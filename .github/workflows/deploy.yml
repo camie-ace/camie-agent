@@ -1,0 +1,71 @@
+name: Deploy Camie Agent to DOKS
+on:
+  pull_request:
+    types: [closed]
+    branches:
+      - main
+  workflow_dispatch:
+jobs:
+  build-and-deploy:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    env:
+      IMAGE_REGISTRY: camien0kage
+      IMAGE_NAME: camie-agent-service
+      # IMAGE_TAG will be set by the image_details step
+    steps:
+      - name: Checkout App Code
+        uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Checkout DevOps Repository (containing Helm chart)
+        uses: actions/checkout@v4
+        with:
+          repository: camie-ace/dev-ops
+          path: devops_repo_checkout
+          # token: ${{ secrets.PAT_FOR_DEVOPS_REPO }} # If dev-ops repo is private
+      - name: Set Image Tag
+        id: image_details
+        run: echo "tag=${{ github.sha }}" >> $GITHUB_OUTPUT
+
+      # --------------------------------------------------------------------
+      # Docker Build and Push Steps
+      # --------------------------------------------------------------------
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_ACCESS_TOKEN }}
+      - name: Build Docker image
+        run: |
+          docker build -t ${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.image_details.outputs.tag }} \
+                       -t ${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_NAME }}:latest .
+      - name: Push Docker image (specific tag and latest)
+        run: |
+          docker push ${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.image_details.outputs.tag }}
+          docker push ${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+      - name: Set up DigitalOcean doctl
+        uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+      - name: Save Kubeconfig for DOKS
+        run: doctl kubernetes cluster kubeconfig save ${{ secrets.K8S_CLUSTER_NAME }}
+      - name: Deploy with Helm
+        run: |
+          helm upgrade --install camie-agent-release ./devops_repo_checkout/camie-agent-chart \
+            --namespace camie-agent \
+            --create-namespace \
+            --set image.repository='${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_NAME }}' \
+            --set image.tag='${{ steps.image_details.outputs.tag }}' \
+            --set-string secrets.livekitUrlConfig='${{ secrets.LIVEKIT_URL_CONFIG }}' \
+            --set-string secrets.dotenv.livekitUrl='${{ secrets.DOTENV_LIVEKIT_URL }}' \
+            --set-string secrets.dotenv.trunkName='${{ secrets.DOTENV_TRUNK_NAME }}' \
+            --set-string secrets.dotenv.phoneNumber='${{ secrets.DOTENV_PHONE_NUMBER }}' \
+            --set-string secrets.dotenv.krispEnabled='${{ secrets.DOTENV_KRISP_ENABLED }}' \
+            --set-string secrets.dotenv.deepgramApiKey='${{ secrets.DOTENV_DEEPGRAM_API_KEY }}' \
+            --set-string secrets.dotenv.openaiApiKey='${{ secrets.DOTENV_OPENAI_API_KEY }}' \
+            --set-string secrets.dotenv.cartesiaApiKey='${{ secrets.DOTENV_CARTESIA_API_KEY }}' \
+            --set-string secrets.dotenv.elevenApiKey='${{ secrets.DOTENV_ELEVEN_API_KEY }}' \
+            --set-string secrets.dotenv.livekitApiKey='${{ secrets.DOTENV_LIVEKIT_API_KEY }}' \
+            --set-string secrets.dotenv.livekitApiSecret='${{ secrets.DOTENV_LIVEKIT_API_SECRET }}' \
+            --wait

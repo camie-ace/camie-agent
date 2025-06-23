@@ -1,0 +1,67 @@
+# Environment files
+.env
+*.env.*
+!.env.example
+
+# Kubernetes configurations (already present)
+k8s/
+
+# Python specific
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environment
+.venv/
+venv/
+ENV/
+env/
+env.bak/
+venv.bak/
+
+# IDE / Editor specific
+.vscode/
+.idea/
+*.project
+*.pydevproject
+*.tmproj
+.DS_Store
+
+# Git specific
+.git/
+.gitignore
+.gitattributes
+
+# Test outputs
+.pytest_cache/
+.coverage
+htmlcov/
+nosetests.xml
+coverage.xml
+*.cover
+*.log
+
+# Docker specific (if Dockerfile is in a subdirectory and you build from parent)
+# Dockerfile # If you don't want to copy the Dockerfile itself, though usually it's fine
+
+# Other project specific files you don't want in the image
+# e.g., local_config.yaml, temp_files/, etc.
