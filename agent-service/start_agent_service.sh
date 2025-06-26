@@ -7,6 +7,7 @@ echo "Checking for existing SIP dispatch rules..."
 
 # Run the Python script to check rules and capture its output
 RULE_STATUS=$(python config/check_dispatch_rules.py)
+echo "$RULE_STATUS"
 
 # Check the output
 if [[ "$RULE_STATUS" == "NO_RULES" ]]; then

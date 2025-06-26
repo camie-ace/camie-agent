@@ -12,6 +12,18 @@ async def check_rules():
     livekit_api_key = os.getenv("LIVEKIT_API_KEY")
     livekit_api_secret = os.getenv("LIVEKIT_API_SECRET")
 
+    missing = []
+    if not livekit_host:
+        missing.append("LIVEKIT_URL")
+    if not livekit_api_key:
+        missing.append("LIVEKIT_API_KEY")
+    if not livekit_api_secret:
+        missing.append("LIVEKIT_API_SECRET")
+
+    if missing:
+        print(
+            f"ERROR: Missing LiveKit credentials in .env: {', '.join(missing)}")
+
     if not all([livekit_host, livekit_api_key, livekit_api_secret]):
         print("ERROR: Missing LiveKit credentials in .env")
         return "ERROR"
@@ -22,7 +34,7 @@ async def check_rules():
         response = await livekit_api.sip.list_sip_dispatch_rule(
             api.ListSIPDispatchRuleRequest()
         )
-        if not response.items:  # An empty list/array means no rules
+        if not response.items:
             print("NO_RULES")
             return "NO_RULES"
         else:
