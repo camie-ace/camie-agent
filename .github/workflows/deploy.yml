@@ -18,7 +18,7 @@ jobs:
       - name: Checkout App Code
         uses: actions/checkout@v4
         with:
-          ref: main # <--- Add this line to force checkout of the main branch
+          ref: main
 
       - name: Checkout DevOps Repository (containing Helm chart)
         uses: actions/checkout@v4
