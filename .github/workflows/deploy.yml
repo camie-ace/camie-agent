@@ -25,7 +25,7 @@ jobs:
         with:
           repository: camie-ace/dev-ops
           path: devops_repo_checkout
-          # token: ${{ secrets.PAT_FOR_DEVOPS_REPO }} # If dev-ops repo is private
+          token: ${{ secrets.PAT_FOR_DEVOPS_REPO }}
       - name: Set Image Tag
         id: image_details
         run: echo "tag=${{ github.sha }}" >> $GITHUB_OUTPUT
