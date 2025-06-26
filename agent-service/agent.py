@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 from livekit import agents
 from livekit.agents import AgentSession, Agent, RoomInputOptions
 
-# imports for default plugins
+# Default plugins
 from livekit.plugins import silero, openai, cartesia, deepgram
 from livekit.plugins.turn_detector.multilingual import MultilingualModel
 
@@ -73,8 +73,6 @@ async def entrypoint(ctx: agents.JobContext):
         # Get custom instructions if available
         instructions = user_settings.get("assistant_instructions",
                                          "You are a helpful assistant. You can answer questions, provide information, and assist users with various tasks. Always be polite and helpful.")
-
-        # Start the agent session
         await session.start(
             room=ctx.room,
             agent=Assistant(instructions=instructions),
