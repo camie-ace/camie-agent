@@ -26,17 +26,24 @@ class Assistant(Agent):
 
 async def entrypoint(ctx: agents.JobContext):
     try:
-
         user_id = ""
-        if ctx.request and ctx.request.participant:
-            user_id = ctx.request.participant.identity
+
+        # Updated way to get user/participant information
+        if hasattr(ctx, 'participant') and ctx.participant:
+            user_id = ctx.participant.identity
             print(f"Using participant identity as user_id: {user_id}")
-        elif ctx.room:
+        elif hasattr(ctx, 'room') and ctx.room:
             user_id = f"room_{ctx.room.name}"
             print(f"Using room name as user identifier: {user_id}")
+        else:
+            # Fallback - check for other attributes that might contain user info
+            print(f"Available JobContext attributes: {dir(ctx)}")
+            user_id = "default_user"
+            print(
+                f"No user identification available, using default: {user_id}")
 
         # Get user settings if available, otherwise fall back to defaults
-        if user_id:
+        if user_id and user_id != "default_user":
             try:
                 user_settings = await get_user_settings(user_id)
                 print(f"Loaded settings for user: {user_id}")
