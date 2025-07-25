@@ -220,7 +220,7 @@ def create_tts_plugin(user_settings: Dict[str, Any]):
         param_mapping = {"language": "language", "voice": "voice"}
         api_key = "CARTESIA_API_KEY"
     elif provider == "elevenlabs":
-        param_mapping = {"model": "model", "voice": "voice"}
+        param_mapping = {"model": "model_id", "voice": "voice_id"}
         api_key = "ELEVEN_API_KEY"
     elif provider == "openai_tts":
         param_mapping = {"model": "model", "voice": "voice"}
