@@ -220,16 +220,16 @@ def create_tts_plugin(user_settings: Dict[str, Any]):
         param_mapping = {"language": "language", "voice": "voice"}
         api_key = "CARTESIA_API_KEY"
     elif provider == "elevenlabs":
-        param_mapping = {"model": "model_id", "voice": "voice"}
+        param_mapping = {"model": "model", "voice": "voice_id"}
         api_key = "ELEVEN_API_KEY"
     elif provider == "openai_tts":
-        param_mapping = {"model": "model_id", "voice": "voice_id"}
+        param_mapping = {"model": "model", "voice": "voice"}
         api_key = "OPENAI_API_KEY"
     else:
         print(
-            f"Warning: Unsupported TTS provider '{provider}'. Falling back to default ElevenLabs.")
-        fallback_config = TTSConfig.ELEVENLABS_UNKNOWN_FR.value
-        return elevenlabs.TTS(model=fallback_config["model"], voice_id=fallback_config["voice"], language=fallback_config["language"])
+            f"Warning: Unsupported TTS provider '{provider}'. Falling back to default Cartesia.")
+        fallback_config = TTSConfig.CARTESIA_DEFAULT_FR.value
+        return cartesia.TTS(language=fallback_config["language"], voice=fallback_config["voice"])
 
     # Try to instantiate the configured plugin
     plugin = _instantiate_configured_plugin(
@@ -243,7 +243,7 @@ def create_tts_plugin(user_settings: Dict[str, Any]):
     if plugin is None:
         print(
             f"Failed to instantiate TTS plugin for provider '{provider}'. Using fallback.")
-        fallback_config = TTSConfig.ELEVENLABS_UNKNOWN_FR.value
-        return elevenlabs.TTS(model=fallback_config["model"], voice_id=fallback_config["voice"], language=fallback_config["language"])
+        fallback_config = TTSConfig.CARTESIA_DEFAULT_FR.value
+        return cartesia.TTS(language=fallback_config["language"], voice=fallback_config["voice"])
 
     return plugin
