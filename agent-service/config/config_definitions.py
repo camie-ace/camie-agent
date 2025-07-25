@@ -23,7 +23,7 @@ class TTSConfig(Enum):
     CARTESIA_DEFAULT_FR = {"provider": "cartesia", "model": None,
                            "language": "fr", "voice": "5c3c89e5-535f-43ef-b14d-f8ffe148c1f0"}
     ELEVENLABS_UNKNOWN_FR = {"provider": "elevenlabs", "model": "eleven_multilingual_v2",
-                             "language": "fr", "voice": "ohItIVrXTBI80RrUECOD"}
+                             "language": "fr", "voice": "pNInz6obpgDQGcFmaJgB"}
     OPENAI_ALLOY_TTS = {"provider": "openai_tts",
                         "model": "tts-1", "language": None, "voice": "alloy"}
 
