@@ -228,7 +228,7 @@ def create_tts_plugin(user_settings: Dict[str, Any]):
     else:
         print(
             f"Warning: Unsupported TTS provider '{provider}'. Falling back to default Cartesia.")
-        fallback_config = TTSConfig.CARTESIA_DEFAULT_EN.value
+        fallback_config = TTSConfig.ELEVENLABS_UNKNOWN_FR.value
         return cartesia.TTS(language=fallback_config["language"], voice=fallback_config["voice"])
 
     # Try to instantiate the configured plugin
