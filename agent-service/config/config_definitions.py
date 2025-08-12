@@ -3,11 +3,11 @@ from enum import Enum
 
 class STTConfig(Enum):
     DEEPGRAM_NOVA2_EN = {"provider": "deepgram",
-                         "model": "nova-2-phonecall", "language": "fr"}
+                         "model": "nova-2-phonecall", "language": "en"}
     DEEPGRAM_NOVA2_FR = {"provider": "deepgram",
                          "model": "nova-2-phonecall", "language": "fr"}
     ELEVENLABS_STT_EN = {"provider": "elevenlabs_stt",
-                         "model": "scribe_v1", "language": "fr"}
+                         "model": "scribe_v1", "language": "eng"}
 
 
 class LLMConfig(Enum):
