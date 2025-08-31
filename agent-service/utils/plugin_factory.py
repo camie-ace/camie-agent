@@ -135,6 +135,7 @@ def create_stt_plugin(user_settings: Dict[str, Any]):
     else:
         print(
             f"Warning: Unsupported STT provider '{provider}'. Falling back to default Deepgram.")
+        # Use stable French model to avoid Deepgram auto-fallback warnings
         fallback_config = STTConfig.DEEPGRAM_NOVA2_FR.value
         return deepgram.STT(model=fallback_config["model"], language=fallback_config["language"])
 
@@ -150,6 +151,7 @@ def create_stt_plugin(user_settings: Dict[str, Any]):
     if plugin is None:
         print(
             f"Failed to instantiate STT plugin for provider '{provider}'. Using fallback.")
+        # Use stable French model to avoid Deepgram auto-fallback warnings
         fallback_config = STTConfig.DEEPGRAM_NOVA2_FR.value
         return deepgram.STT(model=fallback_config["model"], language=fallback_config["language"])
 
