@@ -9,6 +9,7 @@ import json
 from typing import Dict, Any, Optional, List
 from datetime import datetime
 import os
+import jwt
 
 
 class APIClient:
@@ -103,33 +104,65 @@ class APIClient:
             "sources": result.get("sources", [])
         }
 
-    async def fetch_agent_config(self, phone_number: str) -> Optional[Dict[str, Any]]:
+    async def fetch_agent_config(self, phone_number: str, call_type: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """
         Fetch agent configuration from external API/database
 
         Args:
             phone_number: Phone number to get config for
+            call_type: Optional call direction ("inbound" or "outbound")
 
         Returns:
             Agent configuration or None
         """
+        # Preferred: token-based endpoint with JWT Authorization
+        token_url = (
+            os.getenv("VOICE_CONFIG_TOKEN_URL")
+            or (os.getenv("BACKEND_BASE_URL") + "/api/v1/voice-config/get-by-token/")
+            if os.getenv("BACKEND_BASE_URL")
+            else None
+        )
+        jwt_secret = os.getenv("JWT_SECRET")
+
+        if token_url and jwt_secret:
+            try:
+                jwt_payload = {"phone_number": phone_number}
+                token = jwt.encode(jwt_payload, jwt_secret, algorithm="HS256")
+                headers = {"Authorization": f"Bearer {token}"}
+                params = {"call_type": call_type} if call_type else None
+
+                print(
+                    f"Fetching agent config by token for: {phone_number} (call_type={call_type or 'n/a'})")
+                result = await self._make_request(
+                    "GET", token_url, headers=headers, params=params)
+
+                if not result.get("error"):
+                    # Some APIs wrap results in { config: {...} } or { data: {...} }
+                    return result.get("config") or result.get("data") or result
+                else:
+                    print(
+                        f"Failed to fetch token-based config for {phone_number}: {result.get('message')}")
+            except Exception as e:
+                print(f"Token-based config fetch failed: {e}")
+
+        # Fallback: legacy endpoint with query params
         config_api_url = os.getenv(
             "CONFIG_API_URL", "https://api.example.com/agent-config")
 
-        payload = {
-            "phone_number": phone_number,
-            "timestamp": datetime.now().isoformat()
-        }
+        query = f"phone_number={phone_number}"
+        if call_type:
+            query += f"&call_type={call_type}"
 
-        print(f"Fetching agent config for: {phone_number}")
-        result = await self._make_request("GET", f"{config_api_url}?phone_number={phone_number}")
+        print(
+            f"Fetching agent config (legacy) for: {phone_number} (call_type={call_type or 'n/a'})")
+        result = await self._make_request("GET", f"{config_api_url}?{query}")
 
         if result.get("error"):
             print(
-                f"Failed to fetch config for {phone_number}: {result.get('message')}")
+                f"Failed to fetch legacy config for {phone_number}: {result.get('message')}")
             return None
 
-        return result.get("config")
+        return result.get("config") or result.get("data") or result
 
     async def book_appointment(self, appointment_data: Dict[str, Any]) -> Dict[str, Any]:
         """

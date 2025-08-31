@@ -6,7 +6,11 @@ In a real-world scenario, this would be replaced with actual database calls
 (e.g., to a SQL database, a NoSQL database like MongoDB, or a microservice).
 """
 import asyncio
+import os
+import json
 from typing import Dict, Any, Optional
+from .redis_utils import get_redis_connection
+from .api_client import APIClient
 
 
 # Mock database table for agent configurations
@@ -360,22 +364,60 @@ async def get_agent_config_from_db_by_phone(phone_number: str, call_type: str = 
     print(
         f"DATABASE: Querying for agent config with phone_number: {phone_number}, call_type: {call_type}")
 
-    await asyncio.sleep(0.05)  # Simulate network latency for the DB call
+    # 1) Try Redis cache first
+    try:
+        redis_client = await get_redis_connection()
+        cache_key = f"agent_config:{phone_number}:{call_type}"
+        cached = await redis_client.get(cache_key)
+        if cached:
+            print(f"DATABASE: Cache hit for {cache_key}")
+            return json.loads(cached)
+        else:
+            print(f"DATABASE: Cache miss for {cache_key}")
+    except Exception as e:
+        print(f"DATABASE: Redis not available, skipping cache. Error: {e}")
 
+    # 2) Try external config service (token-based or legacy), then cache
+    config_from_api = None
+    try:
+        async with APIClient() as client:
+            api_config = await client.fetch_agent_config(phone_number, call_type)
+            if api_config and isinstance(api_config, dict):
+                # If API returns multi-call-type dict, select the requested call_type
+                if call_type in api_config and isinstance(api_config[call_type], dict):
+                    config_from_api = api_config.get(call_type)
+                else:
+                    config_from_api = api_config
+                print("DATABASE: Loaded configuration from external API")
+                # Cache it for future if Redis is available
+                try:
+                    redis_client = await get_redis_connection()
+                    cache_key = f"agent_config:{phone_number}:{call_type}"
+                    await redis_client.set(cache_key, json.dumps(config_from_api), ex=300)
+                except Exception:
+                    pass
+    except Exception as e:
+        print(f"DATABASE: External API fetch failed: {e}")
+
+    if config_from_api:
+        return config_from_api
+
+    # 3) Fallback to hardcoded configuration
+    await asyncio.sleep(0.05)  # Simulate small latency
     phone_configs = AGENT_CONFIG_DB.get(phone_number)
     if phone_configs:
         config = phone_configs.get(call_type)
         if config:
             print(
-                f"DATABASE: Found configuration for phone number {phone_number} and call_type {call_type}")
+                f"DATABASE: Found hardcoded configuration for phone number {phone_number} and call_type {call_type}")
             return config
         else:
             print(
-                f"DATABASE: No configuration found for phone number {phone_number} and call_type {call_type}")
+                f"DATABASE: No hardcoded configuration found for phone number {phone_number} and call_type {call_type}")
             return None
     else:
         print(
-            f"DATABASE: No configuration found for phone number {phone_number}")
+            f"DATABASE: No hardcoded configuration found for phone number {phone_number}")
         return None
 
 
@@ -393,19 +435,5 @@ async def get_agent_config_from_db(user_id: str, call_type: str = "inbound") -> 
     print(
         f"DATABASE: Querying for agent config with user_id: {user_id}, call_type: {call_type}")
 
-    await asyncio.sleep(0.05)  # Simulate network latency for the DB call
-
-    user_configs = AGENT_CONFIG_DB.get(user_id)
-    if user_configs:
-        config = user_configs.get(call_type)
-        if config:
-            print(
-                f"DATABASE: Found configuration for {user_id} and call_type {call_type}")
-            return config
-        else:
-            print(
-                f"DATABASE: No configuration found for {user_id} and call_type {call_type}")
-            return None
-    else:
-        print(f"DATABASE: No configuration found for {user_id}")
-        return None
+    # Delegate to phone-based getter (user_id may be a phone number or "default")
+    return await get_agent_config_from_db_by_phone(user_id, call_type)

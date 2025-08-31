@@ -1,7 +1,8 @@
 import asyncio
 from dotenv import load_dotenv
 import re
-from typing import Dict, Any
+import json
+from typing import Dict, Any, Optional, Tuple
 
 from livekit import agents
 from livekit.agents import AgentSession, Agent, RoomInputOptions
@@ -127,19 +128,106 @@ class Assistant(Agent):
         return {"success": False, "message": "User context not available"}
 
 
+def _parse_json_metadata(meta: Optional[str]) -> Dict[str, Any]:
+    """Safely parse JSON-encoded metadata strings into dicts."""
+    if not meta or not isinstance(meta, str):
+        return {}
+    try:
+        return json.loads(meta)
+    except Exception:
+        return {}
+
+
+def extract_numbers_from_context(ctx: agents.JobContext) -> Tuple[Optional[str], Optional[str], Optional[str]]:
+    """
+    Extract agent (called/DID) phone number and caller phone number from richer context
+    like room metadata, participant metadata, or job metadata.
+
+    Returns: (agent_phone, caller_phone, call_type)
+    call_type can be "inbound" or "outbound" if available in metadata; otherwise None.
+    """
+    agent_phone: Optional[str] = None
+    caller_phone: Optional[str] = None
+    call_type: Optional[str] = None
+
+    # 1) Room metadata (recommended to set via your backend when creating the room)
+    if hasattr(ctx, 'room') and ctx.room:
+        room_meta = _parse_json_metadata(getattr(ctx.room, 'metadata', None))
+        # Common keys to check for agent/called DID
+        for key in ['agent_phone', 'to_number', 'called_number', 'did', 'destination', 'sip_to', 'sipTo']:
+            if not agent_phone and isinstance(room_meta.get(key), str):
+                agent_phone = room_meta.get(key)
+        for key in ['caller_phone', 'from_number', 'caller', 'sip_from', 'sipFrom']:
+            if not caller_phone and isinstance(room_meta.get(key), str):
+                caller_phone = room_meta.get(key)
+        if isinstance(room_meta.get('direction'), str):
+            call_type = room_meta.get('direction')
+
+    # 2) Participant metadata (SIP gateways often include SIP headers here)
+    try:
+        if hasattr(ctx, 'room') and ctx.room and hasattr(ctx.room, 'participants'):
+            for participant in ctx.room.participants:
+                pmeta = _parse_json_metadata(
+                    getattr(participant, 'metadata', None))
+                for key in ['to_number', 'called_number', 'did', 'destination', 'sip_to', 'sipTo', 'agent_phone']:
+                    if not agent_phone and isinstance(pmeta.get(key), str):
+                        agent_phone = pmeta.get(key)
+                for key in ['from_number', 'caller', 'caller_phone', 'sip_from', 'sipFrom']:
+                    if not caller_phone and isinstance(pmeta.get(key), str):
+                        caller_phone = pmeta.get(key)
+                if isinstance(pmeta.get('direction'), str) and not call_type:
+                    call_type = pmeta.get('direction')
+    except Exception:
+        pass
+
+    # 3) Job metadata (if your infra passes details when scheduling the agent)
+    try:
+        job_meta = _parse_json_metadata(
+            getattr(getattr(ctx, 'job', None), 'metadata', None))
+        for key in ['agent_phone', 'to_number', 'called_number', 'did', 'destination']:
+            if not agent_phone and isinstance(job_meta.get(key), str):
+                agent_phone = job_meta.get(key)
+        for key in ['caller_phone', 'from_number', 'caller']:
+            if not caller_phone and isinstance(job_meta.get(key), str):
+                caller_phone = job_meta.get(key)
+        if isinstance(job_meta.get('direction'), str) and not call_type:
+            call_type = job_meta.get('direction')
+    except Exception:
+        pass
+
+    return agent_phone, caller_phone, call_type
+
+
 async def entrypoint(ctx: agents.JobContext):
+    user_id: Optional[str] = None
     try:
         phone_number = None
         call_type = "inbound"
-        
-        if hasattr(ctx, 'room') and ctx.room and 'sip-room-' in ctx.room.name:
-            match = re.search(r'\+[\d]+', ctx.room.name)
+
+        # Prefer extracting from call context (metadata) over parsing room name
+        agent_phone, caller_phone, inferred_call_type = extract_numbers_from_context(
+            ctx)
+        if agent_phone:
+            phone_number = agent_phone
+            print(f"Identified agent phone from context: {phone_number}")
+        if inferred_call_type:
+            # Normalize common variants
+            lc = inferred_call_type.strip().lower()
+            if lc in {"in", "incoming", "inbound"}:
+                call_type = "inbound"
+            elif lc in {"out", "outgoing", "outbound"}:
+                call_type = "outbound"
+
+        # Fallback to room name pattern only if not found in metadata
+        if not phone_number and hasattr(ctx, 'room') and ctx.room and isinstance(ctx.room.name, str):
             print(f"Room name: {ctx.room.name}")
-            if match:
-                print(f"Identified phone number from room name: {match.group(0)}")
-                phone_number = match.group(0)
-                print(
-                    f"Identified phone number from room name: {phone_number}")
+            if 'sip-room-' in ctx.room.name:
+                match = re.search(r'\+[\d]+', ctx.room.name)
+                if match:
+                    phone_number = match.group(0)
+                    print(
+                        f"Identified phone number from room name: {phone_number}")
+
         agent_config = DEFAULT_SETTINGS.copy()
 
         if phone_number:
@@ -186,8 +274,10 @@ async def entrypoint(ctx: agents.JobContext):
         )
 
         # Get custom instructions if available
-        instructions = agent_config.get("assistant_instructions",
-                                        "You are a helpful assistant. You can answer questions, provide information, and assist users with various tasks. Always be polite and helpful.")
+        instructions = agent_config.get(
+            "assistant_instructions",
+            "You are a helpful assistant. You can answer questions, provide information, and assist users with various tasks. Always be polite and helpful.",
+        )
 
         # Create assistant with instructions (no user_id in constructor)
         assistant = Assistant(instructions=instructions)
@@ -207,24 +297,24 @@ async def entrypoint(ctx: agents.JobContext):
         await ctx.connect()
 
         # Get custom welcome message if available
-        default_welcome = "Bonjour, je suis Pascal de Pôle démarches. je vous appelle suite à votre demande liée à l'obtention d'un logement social de type HLM"
+        default_welcome = (
+            "Bonjour, je suis Pascal de Pôle démarches. je vous appelle suite à votre demande liée à l'obtention d'un logement social de type HLM"
+        )
         welcome_message = agent_config.get("welcome_message", default_welcome)
 
-        await session.generate_reply(
-            instructions=welcome_message,
-        )
+        await session.generate_reply(instructions=welcome_message)
     except Exception as e:
         print(f"Error in agent entrypoint: {e}")
         # Cleanup context on error
         if user_id:
             try:
                 await cleanup_context(user_id)
-            except:
+            except:  # noqa: E722
                 pass
         # Attempt to close Redis connection on error
         try:
             await close_redis_pool()
-        except:
+        except:  # noqa: E722
             pass
         raise  # Re-raise the exception so LiveKit can handle it
 
