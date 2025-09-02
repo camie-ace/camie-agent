@@ -204,6 +204,13 @@ async def entrypoint(ctx: agents.JobContext):
         phone_number = None
         call_type = "inbound"
 
+        # Connect early to satisfy LiveKit worker timing (avoid 10s warning)
+        try:
+            await ctx.connect()
+        except Exception as e:
+            print(
+                f"Warning: initial ctx.connect() failed, will retry later: {e}")
+
         # Prefer extracting from call context (metadata) over parsing room name
         agent_phone, caller_phone, inferred_call_type = extract_numbers_from_context(
             ctx)
@@ -225,7 +232,8 @@ async def entrypoint(ctx: agents.JobContext):
             match = re.search(r"\+\d{6,15}", ctx.room.name)
             if match:
                 phone_number = match.group(0)
-                print(f"Identified phone number from room name: {phone_number}")
+                print(
+                    f"Identified phone number from room name: {phone_number}")
 
         agent_config = DEFAULT_SETTINGS.copy()
 
@@ -307,8 +315,6 @@ async def entrypoint(ctx: agents.JobContext):
             agent=assistant,
             room_input_options=RoomInputOptions(),
         )
-
-        await ctx.connect()
 
         # Get custom welcome message if available
         default_welcome = (
