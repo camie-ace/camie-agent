@@ -70,4 +70,6 @@ jobs:
           --set-string secrets.dotenv.ELEVEN_API_KEY='${{ secrets.DOTENV_ELEVEN_API_KEY }}' \
           --set-string secrets.dotenv.LIVEKIT_API_KEY='${{ secrets.DOTENV_LIVEKIT_API_KEY }}' \
           --set-string secrets.dotenv.LIVEKIT_API_SECRET='${{ secrets.DOTENV_LIVEKIT_API_SECRET }}' \
+          --set-string secrets.dotenv.JWT_SECRET='${{ secrets.JWT_SECRET }}' \
+          --set-string secrets.dotenv.VOICE_CONFIG_TOKEN_URL='${{ secrets.VOICE_CONFIG_TOKEN_URL }}' \
             --wait
