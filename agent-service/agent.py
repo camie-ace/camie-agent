@@ -221,12 +221,11 @@ async def entrypoint(ctx: agents.JobContext):
         # Fallback to room name pattern only if not found in metadata
         if not phone_number and hasattr(ctx, 'room') and ctx.room and isinstance(ctx.room.name, str):
             print(f"Room name: {ctx.room.name}")
-            if 'sip-room-' in ctx.room.name:
-                match = re.search(r'\+[\d]+', ctx.room.name)
-                if match:
-                    phone_number = match.group(0)
-                    print(
-                        f"Identified phone number from room name: {phone_number}")
+            # Extract first E.164-like number anywhere in the room name (e.g., twilio-+E164-...)
+            match = re.search(r"\+\d{6,15}", ctx.room.name)
+            if match:
+                phone_number = match.group(0)
+                print(f"Identified phone number from room name: {phone_number}")
 
         agent_config = DEFAULT_SETTINGS.copy()
 
@@ -248,7 +247,22 @@ async def entrypoint(ctx: agents.JobContext):
                 "No dynamic or default configuration found in DB, using static settings.")
 
         # The user_id is still useful for session-specific context (e.g., Redis keys)
-        user_id = f"session_{ctx.room.sid}"
+        # Handle Room.sid being a coroutine in some SDK versions
+        sid_value = getattr(ctx.room, 'sid', None)
+        sid_str: Optional[str] = None
+        try:
+            if asyncio.iscoroutine(sid_value):
+                sid_str = await sid_value
+            elif callable(sid_value):
+                maybe = sid_value()
+                sid_str = await maybe if asyncio.iscoroutine(maybe) else str(maybe)
+            elif sid_value is not None:
+                sid_str = str(sid_value)
+        except Exception:
+            sid_str = None
+        if not sid_str:
+            sid_str = getattr(ctx.room, 'name', 'unknown') or 'unknown'
+        user_id = f"session_{sid_str}"
 
         # Create plugins based on the loaded agent_config
         try:
@@ -259,7 +273,7 @@ async def entrypoint(ctx: agents.JobContext):
             print(f"Error creating custom plugins from settings: {e}")
             print("Falling back to default plugin configuration")
             # Fall back to default plugins if there's an issue with settings
-            stt_plugin = deepgram.STT(model="nova-2-phonecall", language="fr")
+            stt_plugin = deepgram.STT(model="nova-2-general", language="fr")
             llm_plugin = openai.LLM(model="gpt-4o-mini")
             tts_plugin = cartesia.TTS(
                 language='fr', voice="5c3c89e5-535f-43ef-b14d-f8ffe148c1f0")
