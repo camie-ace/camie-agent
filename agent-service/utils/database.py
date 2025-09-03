@@ -379,6 +379,20 @@ async def get_agent_config_from_db_by_phone(phone_number: str, call_type: str = 
 
     # 2) Try external config service (token-based or legacy), then cache
     config_from_api = None
+    token_url = (
+        os.getenv("VOICE_CONFIG_TOKEN_URL")
+        or (os.getenv("BACKEND_BASE_URL") + "/api/v1/voice-config/get-by-token/")
+        if os.getenv("BACKEND_BASE_URL")
+        else None
+    )
+    jwt_secret = os.getenv("JWT_SECRET")
+
+    if token_url and jwt_secret:
+        print(
+            f"DATABASE: Will attempt token-based config fetch from {token_url}")
+    else:
+        print("DATABASE: No token URL or JWT secret configured, will skip token-based config fetch")
+
     try:
         async with APIClient() as client:
             api_config = await client.fetch_agent_config(phone_number, call_type)
@@ -394,8 +408,9 @@ async def get_agent_config_from_db_by_phone(phone_number: str, call_type: str = 
                     redis_client = await get_redis_connection()
                     cache_key = f"agent_config:{phone_number}:{call_type}"
                     await redis_client.set(cache_key, json.dumps(config_from_api), ex=300)
-                except Exception:
-                    pass
+                    print(f"DATABASE: Cached config for {cache_key}")
+                except Exception as e:
+                    print(f"DATABASE: Could not cache config: {e}")
     except Exception as e:
         print(f"DATABASE: External API fetch failed: {e}")
 
@@ -403,6 +418,7 @@ async def get_agent_config_from_db_by_phone(phone_number: str, call_type: str = 
         return config_from_api
 
     # 3) Fallback to hardcoded configuration
+    print("DATABASE: Falling back to hardcoded configuration")
     await asyncio.sleep(0.05)  # Simulate small latency
     phone_configs = AGENT_CONFIG_DB.get(phone_number)
     if phone_configs:
