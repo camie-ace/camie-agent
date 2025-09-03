@@ -13,8 +13,9 @@ async def get_redis_pool_instance():
     global redis_pool
     if redis_pool is None:
         print("Initializing Redis connection pool...")
+        # Set a short timeout to fail faster when Redis is unavailable
         redis_pool = redis.ConnectionPool.from_url(
-            REDIS_URL, decode_responses=True)
+            REDIS_URL, decode_responses=True, socket_timeout=1.0, socket_connect_timeout=1.0)
     return redis_pool
 
 
