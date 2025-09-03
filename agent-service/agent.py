@@ -6,6 +6,7 @@ from typing import Dict, Any, Optional, Tuple
 
 from livekit import agents
 from livekit.agents import AgentSession, Agent, RoomInputOptions
+from livekit.rtc import Room
 
 # Default plugins
 from livekit.plugins import silero, openai, cartesia, deepgram
@@ -47,25 +48,29 @@ class Assistant(Agent):
                 print(f"Error initializing context for {user_id}: {e}")
                 self.conversation_context = None
 
-    async def keep_alive(self):
-        """Task to keep agent connection alive during long processes"""
+    async def keep_alive(self, room: Room):
+        """Task to keep agent connection alive by sending metadata updates"""
         try:
             while True:
-                # Send a heartbeat every 10 seconds to keep connection alive
                 await asyncio.sleep(10)
                 print("Agent connection heartbeat...")
-                # The print is enough to keep the process active
+                try:
+                    # Send a minimal metadata update to maintain the connection
+                    await room.local_participant.publish_metadata("{}")
+                except Exception as e:
+                    print(f"Heartbeat metadata update failed: {e}")
         except asyncio.CancelledError:
             # Expected on cleanup
             print("Keep-alive task cancelled")
         except Exception as e:
             print(f"Keep-alive task failed: {e}")
 
-    def start_keep_alive(self):
+    def start_keep_alive(self, room: Room):
         """Start background task to keep connection alive"""
         if not self._keep_alive_task or self._keep_alive_task.done():
             try:
-                self._keep_alive_task = asyncio.create_task(self.keep_alive())
+                self._keep_alive_task = asyncio.create_task(
+                    self.keep_alive(room))
                 print("Started keep-alive background task")
                 return True
             except Exception as e:
@@ -260,49 +265,7 @@ async def entrypoint(ctx: agents.JobContext):
                 print(
                     f"Identified phone number from room name: {phone_number}")
 
-        # Create temporary basic plugins for immediate greeting
-        # While we're fetching the config, provide an immediate greeting
-        print("Setting up temporary session for initial greeting...")
-        temp_session = None
-        try:
-            temp_stt = deepgram.STT(model="nova-2-general", language="fr")
-            temp_llm = openai.LLM(model="gpt-4o-mini")
-            temp_tts = cartesia.TTS(
-                language='fr', voice="5c3c89e5-535f-43ef-b14d-f8ffe148c1f0")
-
-            # Create temporary session just to say welcome
-            temp_session = AgentSession(
-                stt=temp_stt,
-                llm=temp_llm,
-                tts=temp_tts,
-                vad=silero.VAD.load(min_silence_duration=0.10),
-                turn_detection=MultilingualModel(),
-            )
-
-            # Start the session immediately with more permissive input options
-            room_options = RoomInputOptions()
-            room_options.reduce_latency = True  # Prioritize latency over accuracy
-            room_options.optimize_for_voice = True  # This call is primarily voice
-
-            await temp_session.start(
-                room=ctx.room,
-                agent=Agent(
-                    instructions="You are a temporary greeting agent."),
-                room_input_options=room_options,
-            )
-
-            # Say immediate greeting while we load the config
-            await temp_session.say("Bonjour, un instant s'il vous plaît.")
-            print("Initial greeting sent, loading full configuration...")
-
-            # Keep the connection active to prevent timeouts
-            try:
-                asyncio.create_task(temp_session.keep_alive())
-            except Exception as e:
-                print(f"Warning: couldn't create keep-alive task: {e}")
-        except Exception as e:
-            print(f"Warning: Error setting up temporary greeting: {e}")
-            # Continue with main session setup even if temporary greeting failed        # Now proceed with the rest of initialization in parallel
+        # Now proceed with the rest of initialization in parallel
         # Prefer extracting from call context (metadata) over parsing room name
         agent_phone, caller_phone, inferred_call_type = extract_numbers_from_context(
             ctx)
@@ -393,17 +356,7 @@ async def entrypoint(ctx: agents.JobContext):
         await assistant.initialize_context(user_id, initial_context)
 
         # Start keep-alive task to maintain connection
-        assistant.start_keep_alive()
-
-        # Stop the temporary session and start the fully configured one
-        print("Transitioning from temporary to full session...")
-        try:
-            # Only try to stop if it was successfully created
-            if temp_session:
-                await temp_session.stop()
-        except Exception as e:
-            print(f"Warning: Error stopping temporary session: {e}")
-            # Continue anyway
+        assistant.start_keep_alive(ctx.room)
 
         print("Starting fully configured agent session...")
 
