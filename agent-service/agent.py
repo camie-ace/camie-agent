@@ -210,8 +210,16 @@ def extract_numbers_from_context(ctx: agents.JobContext) -> Tuple[Optional[str],
     try:
         if hasattr(ctx, 'room') and ctx.room and hasattr(ctx.room, 'participants'):
             for participant in ctx.room.participants:
-                pmeta = _parse_json_metadata(
-                    getattr(participant, 'metadata', None))
+                # Handle case where metadata is a string value directly
+                raw_metadata = getattr(participant, 'metadata', None)
+                if isinstance(raw_metadata, str) and raw_metadata.strip().lower() == "outbound":
+                    call_type = "outbound"
+                    print(
+                        f"Detected outbound call from direct participant metadata: {raw_metadata}")
+                    continue
+
+                # Continue with JSON parsing for structured metadata
+                pmeta = _parse_json_metadata(raw_metadata)
                 for key in ['to_number', 'called_number', 'did', 'destination', 'sip_to', 'sipTo', 'agent_phone']:
                     if not agent_phone and isinstance(pmeta.get(key), str):
                         agent_phone = pmeta.get(key)
@@ -220,7 +228,8 @@ def extract_numbers_from_context(ctx: agents.JobContext) -> Tuple[Optional[str],
                         caller_phone = pmeta.get(key)
                 if isinstance(pmeta.get('direction'), str) and not call_type:
                     call_type = pmeta.get('direction')
-    except Exception:
+    except Exception as e:
+        print(f"Error processing participant metadata: {e}")
         pass
 
     # 3) Job metadata (if your infra passes details when scheduling the agent)
