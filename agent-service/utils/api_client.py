@@ -115,13 +115,8 @@ class APIClient:
         Returns:
             Agent configuration or None
         """
-        # Preferred: token-based endpoint with JWT Authorization
-        token_url = (
-            os.getenv("VOICE_CONFIG_TOKEN_URL")
-            or (os.getenv("BACKEND_BASE_URL") + "/api/v1/voice-config/get-by-token/")
-            if os.getenv("BACKEND_BASE_URL")
-            else None
-        )
+        # Token-based endpoint with JWT Authorization
+        token_url = os.getenv("VOICE_CONFIG_TOKEN_URL")
         jwt_secret = os.getenv("JWT_SECRET")
 
         if token_url and jwt_secret:
@@ -144,25 +139,12 @@ class APIClient:
                         f"Failed to fetch token-based config for {phone_number}: {result.get('message')}")
             except Exception as e:
                 print(f"Token-based config fetch failed: {e}")
-
-        # Fallback: legacy endpoint with query params
-        config_api_url = os.getenv(
-            "CONFIG_API_URL", "https://api.example.com/agent-config")
-
-        query = f"phone_number={phone_number}"
-        if call_type:
-            query += f"&call_type={call_type}"
-
-        print(
-            f"Fetching agent config (legacy) for: {phone_number} (call_type={call_type or 'n/a'})")
-        result = await self._make_request("GET", f"{config_api_url}?{query}")
-
-        if result.get("error"):
+        else:
             print(
-                f"Failed to fetch legacy config for {phone_number}: {result.get('message')}")
-            return None
+                "Cannot fetch agent config: VOICE_CONFIG_TOKEN_URL or JWT_SECRET not configured")
 
-        return result.get("config") or result.get("data") or result
+        # Return None if token-based fetch failed or wasn't configured
+        return None
 
     async def book_appointment(self, appointment_data: Dict[str, Any]) -> Dict[str, Any]:
         """
