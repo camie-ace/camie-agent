@@ -14,7 +14,6 @@ from livekit.plugins.turn_detector.multilingual import MultilingualModel
 # All plugin instantiation is handled by the factory
 from config.config_definitions import DEFAULT_SETTINGS
 from utils.plugin_factory import create_stt_plugin, create_llm_plugin, create_tts_plugin
-from utils.redis_utils import close_redis_pool
 from utils.context_manager import get_context_for_user, cleanup_context
 from utils.database import get_agent_config_from_db_by_phone
 from utils.business_tools import (
@@ -225,7 +224,8 @@ async def entrypoint(ctx: agents.JobContext):
             match = re.search(r"\+\d{6,15}", ctx.room.name)
             if match:
                 phone_number = match.group(0)
-                print(f"Identified phone number from room name: {phone_number}")
+                print(
+                    f"Identified phone number from room name: {phone_number}")
 
         agent_config = DEFAULT_SETTINGS.copy()
 
@@ -246,7 +246,7 @@ async def entrypoint(ctx: agents.JobContext):
             print(
                 "No dynamic or default configuration found in DB, using static settings.")
 
-        # The user_id is still useful for session-specific context (e.g., Redis keys)
+        # The user_id is useful for session-specific context
         # Handle Room.sid being a coroutine in some SDK versions
         sid_value = getattr(ctx.room, 'sid', None)
         sid_str: Optional[str] = None
@@ -325,33 +325,9 @@ async def entrypoint(ctx: agents.JobContext):
                 await cleanup_context(user_id)
             except:  # noqa: E722
                 pass
-        # Attempt to close Redis connection on error
-        try:
-            await close_redis_pool()
-        except:  # noqa: E722
-            pass
         raise  # Re-raise the exception so LiveKit can handle it
 
 
 if __name__ == "__main__":
-    # Register Redis cleanup for when the process exits
-    import atexit
-
-    def cleanup_redis():
-        try:
-            loop = asyncio.new_event_loop()
-            loop.run_until_complete(close_redis_pool())
-            loop.close()
-            print("Redis connection closed.")
-        except Exception as e:
-            print(f"Error during Redis cleanup: {e}")
-
-    def cleanup_all():
-        """Cleanup all resources"""
-        cleanup_redis()
-        # Note: Context cleanup happens per session, not globally
-
-    atexit.register(cleanup_all)
-
     # Let LiveKit CLI manage the event loop
     agents.cli.run_app(agents.WorkerOptions(entrypoint_fnc=entrypoint))
