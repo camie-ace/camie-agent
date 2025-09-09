@@ -387,6 +387,17 @@ async def get_agent_config_from_db_by_phone(phone_number: str, call_type: str = 
     )
     jwt_secret = os.getenv("JWT_SECRET")
 
+    # Debug all environment variables related to configuration
+    print(
+        f"DATABASE DEBUG: VOICE_CONFIG_TOKEN_URL = '{os.getenv('VOICE_CONFIG_TOKEN_URL')}'")
+    print(
+        f"DATABASE DEBUG: BACKEND_BASE_URL = '{os.getenv('BACKEND_BASE_URL')}'")
+    print(
+        f"DATABASE DEBUG: JWT_SECRET exists = {bool(jwt_secret)}, length = {len(jwt_secret) if jwt_secret else 0}")
+    print(f"DATABASE DEBUG: Resolved token_url = '{token_url}'")
+    print(
+        f"DATABASE DEBUG: Environment variables: {sorted([k for k in os.environ.keys()])[:10]}")
+
     if token_url and jwt_secret:
         print(
             f"DATABASE: Will attempt token-based config fetch from {token_url}")

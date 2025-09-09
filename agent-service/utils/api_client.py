@@ -10,6 +10,7 @@ from typing import Dict, Any, Optional, List
 from datetime import datetime
 import os
 import jwt
+import time
 
 
 class APIClient:
@@ -115,36 +116,61 @@ class APIClient:
         Returns:
             Agent configuration or None
         """
-        # Token-based endpoint with JWT Authorization
-        token_url = os.getenv("VOICE_CONFIG_TOKEN_URL")
+        # Get token-based endpoint details
+        token_url = (
+            os.getenv("VOICE_CONFIG_TOKEN_URL")
+            or (os.getenv("BACKEND_BASE_URL") + "/api/v1/voice-config/get-by-token/")
+            if os.getenv("BACKEND_BASE_URL")
+            else None
+        )
         jwt_secret = os.getenv("JWT_SECRET")
 
-        if token_url and jwt_secret:
-            try:
-                jwt_payload = {"phone_number": phone_number}
-                token = jwt.encode(jwt_payload, jwt_secret, algorithm="HS256")
-                headers = {"Authorization": f"Bearer {token}"}
-                params = {"call_type": call_type} if call_type else None
-
-                print(
-                    f"Fetching agent config by token for: {phone_number} (call_type={call_type or 'n/a'})")
-                result = await self._make_request(
-                    "GET", token_url, headers=headers, params=params)
-
-                if not result.get("error"):
-                    # Some APIs wrap results in { config: {...} } or { data: {...} }
-                    return result.get("config") or result.get("data") or result
-                else:
-                    print(
-                        f"Failed to fetch token-based config for {phone_number}: {result.get('message')}")
-            except Exception as e:
-                print(f"Token-based config fetch failed: {e}")
-        else:
+        if not token_url or not jwt_secret:
             print(
-                "Cannot fetch agent config: VOICE_CONFIG_TOKEN_URL or JWT_SECRET not configured")
+                "Cannot fetch agent configuration: Token URL or JWT secret not configured")
+            return None
 
-        # Return None if token-based fetch failed or wasn't configured
-        return None
+        # Create JWT token for authorization
+        try:
+            now = int(time.time())
+            exp = now + 3600
+
+            jwt_payload = {
+                "phone_number": phone_number,
+                "role": "voice_agent",
+                "iat": now,
+                "exp": exp,
+                "sub": phone_number
+            }
+
+            token = jwt.encode(jwt_payload, jwt_secret, algorithm="HS256")
+
+            headers = {"Authorization": f"Bearer {token}"}
+            params = {"call_type": call_type} if call_type else None
+
+            print(
+                f"Fetching agent config by token for: {phone_number} (call_type={call_type or 'n/a'})")
+            result = await self._make_request("GET", token_url, headers=headers, params=params)
+
+            if result.get("responseCode") == "00":
+                print(f"Successfully fetched config for {phone_number}")
+                return result.get("data")
+            elif result.get("responseCode") == "03" and "Agent not found for phone number" in result.get("responseDescription", ""):
+                print(
+                    f"Agent not found in database for {phone_number}: {result.get('responseDescription')}")
+                return None
+            elif not result.get("error"):
+                # Other responseCode but not an error from the request itself
+                print(
+                    f"API returned non-success code for {phone_number}: {result.get('responseDescription')}")
+                return None
+            else:
+                print(
+                    f"Failed to fetch token-based config for {phone_number}: {result.get('message')}")
+                return None
+        except Exception as e:
+            print(f"Token-based config fetch failed: {e}")
+            return None
 
     async def book_appointment(self, appointment_data: Dict[str, Any]) -> Dict[str, Any]:
         """
