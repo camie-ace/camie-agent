@@ -23,8 +23,9 @@ class APIClient:
 
     async def __aenter__(self):
         """Async context manager entry"""
+        print("DEBUG: Creating new aiohttp.ClientSession with base headers:",
+              self.base_headers)
         self.session = aiohttp.ClientSession(
-            headers=self.base_headers,
             timeout=aiohttp.ClientTimeout(total=30)
         )
         return self
@@ -40,9 +41,21 @@ class APIClient:
             raise RuntimeError(
                 "APIClient must be used as async context manager")
 
+        # If headers are provided in kwargs, make sure they override the session's default headers
+        if 'headers' in kwargs:
+            # For debugging
+            print(f"DEBUG: Request headers: {kwargs['headers']}")
+            # Don't modify the original headers
+            merged_headers = dict(self.base_headers)
+            merged_headers.update(kwargs['headers'])
+            kwargs['headers'] = merged_headers
+
         try:
+            print(f"DEBUG: Making {method} request to {url}")
             async with self.session.request(method, url, **kwargs) as response:
                 response_text = await response.text()
+                print(f"DEBUG: Response status code: {response.status}")
+                print(f"DEBUG: Response headers: {dict(response.headers)}")
 
                 if response.status >= 400:
                     print(f"API Error {response.status}: {response_text}")
@@ -84,9 +97,11 @@ class APIClient:
 
         # Create JWT token for authorization
         try:
+            # Ensure we're using integer timestamps
             now = int(time.time())
             exp = now + 3600
 
+            # Create a complete JWT payload with all required fields
             jwt_payload = {
                 "phone_number": phone_number,
                 "role": "voice_agent",
@@ -95,14 +110,34 @@ class APIClient:
                 "sub": phone_number
             }
 
-            token = jwt.encode(jwt_payload, jwt_secret, algorithm="HS256")
+            print(f"DEBUG: JWT payload: {jwt_payload}")
 
-            headers = {"Authorization": f"Bearer {token}"}
+            # Make sure we're using the right algorithm from environment, default to HS256
+            jwt_algorithm = os.getenv("JWT_ALGORITHM", "HS256")
+
+            # Explicitly encode the JWT token
+            token = jwt.encode(jwt_payload, jwt_secret,
+                               algorithm=jwt_algorithm)
+
+            # Create proper headers with content type and authorization
+            headers = {
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json",
+                "User-Agent": "Agent-Service/1.0"
+            }
+
             params = {"call_type": call_type} if call_type else None
 
             print(
                 f"Fetching agent config from VOICE_CONFIG_TOKEN_URL for: {phone_number} (call_type={call_type or 'n/a'})")
+            print(f"DEBUG: Using JWT algorithm: {jwt_algorithm}")
+            print(f"DEBUG: JWT token: {token}")
+            print(f"DEBUG: Headers: {headers}")
+
             result = await self._make_request("GET", token_url, headers=headers, params=params)
+
+            # Debug the full API response
+            print(f"DEBUG: Full API response: {result}")
 
             if result.get("responseCode") == "00":
                 print(f"Successfully fetched config for {phone_number}")
