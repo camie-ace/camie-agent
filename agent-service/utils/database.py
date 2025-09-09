@@ -9,7 +9,6 @@ import asyncio
 import os
 import json
 from typing import Dict, Any, Optional
-from .redis_utils import get_redis_connection
 from .api_client import APIClient
 
 
@@ -352,7 +351,11 @@ When customers ask questions:
 
 async def get_agent_config_from_db_by_phone(phone_number: str, call_type: str = "inbound") -> Optional[Dict[str, Any]]:
     """
-    Simulates fetching an agent's configuration from a database using a phone number and call type.
+    Fetches an agent's configuration using a phone number and call type.
+
+    Workflow:
+    1. Try to get configuration from VOICE_CONFIG_TOKEN_URL using JWT
+    2. Fall back to hardcoded configuration if API call fails
 
     Args:
         phone_number: The phone number that received the call.
@@ -364,73 +367,38 @@ async def get_agent_config_from_db_by_phone(phone_number: str, call_type: str = 
     print(
         f"DATABASE: Querying for agent config with phone_number: {phone_number}, call_type: {call_type}")
 
-    # 1) Try Redis cache first
-    try:
-        redis_client = await get_redis_connection()
-        cache_key = f"agent_config:{phone_number}:{call_type}"
-        cached = await redis_client.get(cache_key)
-        if cached:
-            print(f"DATABASE: Cache hit for {cache_key}")
-            return json.loads(cached)
-        else:
-            print(f"DATABASE: Cache miss for {cache_key}")
-    except Exception as e:
-        print(f"DATABASE: Redis not available, skipping cache. Error: {e}")
-
-    # 2) Try external config service (token-based or legacy), then cache
+    # 1) Try external config service with VOICE_CONFIG_TOKEN_URL
     config_from_api = None
-    token_url = (
-        os.getenv("VOICE_CONFIG_TOKEN_URL")
-        or (os.getenv("BACKEND_BASE_URL") + "/api/v1/voice-config/get-by-token/")
-        if os.getenv("BACKEND_BASE_URL")
-        else None
-    )
+    token_url = os.getenv("VOICE_CONFIG_TOKEN_URL")
     jwt_secret = os.getenv("JWT_SECRET")
 
-    # Debug all environment variables related to configuration
-    print(
-        f"DATABASE DEBUG: VOICE_CONFIG_TOKEN_URL = '{os.getenv('VOICE_CONFIG_TOKEN_URL')}'")
-    print(
-        f"DATABASE DEBUG: BACKEND_BASE_URL = '{os.getenv('BACKEND_BASE_URL')}'")
+    # Debug configuration
+    print(f"DATABASE DEBUG: VOICE_CONFIG_TOKEN_URL = '{token_url}'")
     print(
         f"DATABASE DEBUG: JWT_SECRET exists = {bool(jwt_secret)}, length = {len(jwt_secret) if jwt_secret else 0}")
-    print(f"DATABASE DEBUG: Resolved token_url = '{token_url}'")
-    print(
-        f"DATABASE DEBUG: Environment variables: {sorted([k for k in os.environ.keys()])[:10]}")
 
     if token_url and jwt_secret:
-        print(
-            f"DATABASE: Will attempt token-based config fetch from {token_url}")
+        print(f"DATABASE: Will attempt config fetch from {token_url}")
+
+        try:
+            async with APIClient() as client:
+                api_config = await client.fetch_agent_config(phone_number, call_type)
+                if api_config and isinstance(api_config, dict):
+                    # If API returns multi-call-type dict, select the requested call_type
+                    if call_type in api_config and isinstance(api_config[call_type], dict):
+                        config_from_api = api_config.get(call_type)
+                    else:
+                        config_from_api = api_config
+                    print(
+                        "DATABASE: Successfully loaded configuration from external API")
+                    return config_from_api
+        except Exception as e:
+            print(f"DATABASE: External API fetch failed: {e}")
     else:
-        print("DATABASE: No token URL or JWT secret configured, will skip token-based config fetch")
+        print("DATABASE: No token URL or JWT secret configured, skipping API fetch")
 
-    try:
-        async with APIClient() as client:
-            api_config = await client.fetch_agent_config(phone_number, call_type)
-            if api_config and isinstance(api_config, dict):
-                # If API returns multi-call-type dict, select the requested call_type
-                if call_type in api_config and isinstance(api_config[call_type], dict):
-                    config_from_api = api_config.get(call_type)
-                else:
-                    config_from_api = api_config
-                print("DATABASE: Loaded configuration from external API")
-                # Cache it for future if Redis is available
-                try:
-                    redis_client = await get_redis_connection()
-                    cache_key = f"agent_config:{phone_number}:{call_type}"
-                    await redis_client.set(cache_key, json.dumps(config_from_api), ex=300)
-                    print(f"DATABASE: Cached config for {cache_key}")
-                except Exception as e:
-                    print(f"DATABASE: Could not cache config: {e}")
-    except Exception as e:
-        print(f"DATABASE: External API fetch failed: {e}")
-
-    if config_from_api:
-        return config_from_api
-
-    # 3) Fallback to hardcoded configuration
+    # 2) Fallback to hardcoded configuration
     print("DATABASE: Falling back to hardcoded configuration")
-    await asyncio.sleep(0.05)  # Simulate small latency
     phone_configs = AGENT_CONFIG_DB.get(phone_number)
     if phone_configs:
         config = phone_configs.get(call_type)
