@@ -84,7 +84,11 @@ def transform_api_config(api_config: Dict[str, Any], call_type: str) -> Dict[str
         language = api_config.get("agent_language", "").lower()
 
         if "elevenlabs" in provider and voice_id:
-            agent_config["tts_config_key"] = f"ELEVENLABS_{voice_id}"
+            # Use a recognized format for ElevenLabs voices
+            # The agent expects a predefined key, not a dynamic one with the voice ID
+            agent_config["tts_config_key"] = "ELEVENLABS_DEFAULT_EN"
+            # Store the actual voice ID in voice_settings for later use
+            agent_config["voice_settings"]["voice_id"] = voice_id
         elif "cartesia" in provider:
             if language == "french":
                 agent_config["tts_config_key"] = "CARTESIA_DEFAULT_FR"
@@ -104,11 +108,12 @@ def transform_api_config(api_config: Dict[str, Any], call_type: str) -> Dict[str
     agent_config["initial_context"] = {
         "stage": "greeting",
         "required_fields": [],
-        # Default to 5 minutes
-        "call_duration_seconds": api_config.get("max_call_duration", 300),
-        # Default to 5 seconds
-        "silence_timeout_seconds": api_config.get("silence_duration", 5),
-        "end_on_silence": api_config.get("end_call_on_silence", True)
+        # Convert to seconds, minimum 300 seconds (5 minutes)
+        "call_duration_seconds": max(api_config.get("max_call_duration", 300), 300),
+        # Set a longer silence timeout, minimum 10 seconds
+        "silence_timeout_seconds": max(api_config.get("silence_duration", 10), 10),
+        # Only end on silence if explicitly requested
+        "end_on_silence": api_config.get("end_call_on_silence", False)
     }
 
     # Business config
