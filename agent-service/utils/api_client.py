@@ -1,14 +1,15 @@
 """
-External API client for making HTTP requests to the Voice Config API
+External API client for making HTTP requests to the voice config endpoint
+Handles fetching agent configuration from the token-based endpoint
 """
 
 import asyncio
 import aiohttp
 import json
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional
 import os
 import jwt
-import time
+import re
 
 
 class APIClient:
@@ -41,17 +42,10 @@ class APIClient:
             raise RuntimeError(
                 "APIClient must be used as async context manager")
 
-        # If headers are provided in kwargs, make sure they override the session's default headers
-        if 'headers' in kwargs:
-            # For debugging
-            print(f"DEBUG: Request headers: {kwargs['headers']}")
-            # Don't modify the original headers
-            merged_headers = dict(self.base_headers)
-            merged_headers.update(kwargs['headers'])
-            kwargs['headers'] = merged_headers
+        # Ensure HTTPS protocol is used
+        url = ensure_https_url(url)
 
         try:
-            print(f"DEBUG: Making {method} request to {url}")
             async with self.session.request(method, url, **kwargs) as response:
                 response_text = await response.text()
                 print(f"DEBUG: Response status code: {response.status}")
@@ -77,7 +71,7 @@ class APIClient:
 
     async def fetch_agent_config(self, phone_number: str, call_type: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """
-        Fetch agent configuration from external API using VOICE_CONFIG_TOKEN_URL
+        Fetch agent configuration from external API using token-based endpoint
 
         Args:
             phone_number: Phone number to get config for
@@ -86,84 +80,83 @@ class APIClient:
         Returns:
             Agent configuration or None
         """
-        # Only use VOICE_CONFIG_TOKEN_URL for config fetching
+        # Token-based endpoint with JWT Authorization
         token_url = os.getenv("VOICE_CONFIG_TOKEN_URL")
-        # Ensure we're using HTTPS to avoid redirect issues
-        if token_url and token_url.startswith("http://"):
-            token_url = "https://" + token_url[7:]
-            print(f"Converted token URL to HTTPS: {token_url}")
-
         jwt_secret = os.getenv("JWT_SECRET")
 
-        if not token_url or not jwt_secret:
-            print(
-                "Cannot fetch agent configuration: VOICE_CONFIG_TOKEN_URL or JWT_SECRET not configured")
-            return None
+        # Ensure the URL uses HTTPS protocol
+        if token_url:
+            token_url = ensure_https_url(token_url)
 
-        # Create JWT token for authorization
-        try:
-            # Ensure we're using integer timestamps
-            now = int(time.time())
-            exp = now + 3600
+        if token_url and jwt_secret:
+            try:
+                jwt_payload = {"phone_number": phone_number}
+                token = jwt.encode(jwt_payload, jwt_secret, algorithm="HS256")
+                headers = {"Authorization": f"Bearer {token}"}
+                params = {"call_type": call_type} if call_type else None
 
-            # Create a complete JWT payload with all required fields
-            jwt_payload = {
-                "phone_number": phone_number,
-                "role": "voice_agent",
-                "iat": now,
-                "exp": exp,
-                "sub": phone_number
-            }
-
-            print(f"DEBUG: JWT payload: {jwt_payload}")
-
-            # Make sure we're using the right algorithm from environment, default to HS256
-            jwt_algorithm = os.getenv("JWT_ALGORITHM", "HS256")
-
-            # Explicitly encode the JWT token
-            token = jwt.encode(jwt_payload, jwt_secret,
-                               algorithm=jwt_algorithm)
-
-            # Create proper headers with content type and authorization
-            headers = {
-                "Authorization": f"Bearer {token}",
-                "Content-Type": "application/json",
-                "User-Agent": "Agent-Service/1.0"
-            }
-
-            params = {"call_type": call_type} if call_type else None
-
-            print(
-                f"Fetching agent config from VOICE_CONFIG_TOKEN_URL for: {phone_number} (call_type={call_type or 'n/a'})")
-            print(f"DEBUG: Using JWT algorithm: {jwt_algorithm}")
-            print(f"DEBUG: JWT token: {token}")
-            print(f"DEBUG: Headers: {headers}")
-
-            result = await self._make_request("GET", token_url, headers=headers, params=params)
-
-            # Debug the full API response
-            print(f"DEBUG: Full API response: {result}")
-
-            if result.get("responseCode") == "00":
-                print(f"Successfully fetched config for {phone_number}")
-                return result.get("data")
-            elif result.get("responseCode") == "03" and "Agent not found for phone number" in result.get("responseDescription", ""):
                 print(
-                    f"Agent not found in API for {phone_number}: {result.get('responseDescription')}")
-                return None
-            elif not result.get("error"):
-                # Other responseCode but not an error from the request itself
-                print(
-                    f"API returned non-success code for {phone_number}: {result.get('responseDescription')}")
-                return None
-            else:
-                print(
-                    f"Failed to fetch config for {phone_number}: {result.get('message')}")
-                return None
-        except Exception as e:
-            print(f"Config fetch from VOICE_CONFIG_TOKEN_URL failed: {e}")
-            return None
+                    f"Fetching agent config by token for: {phone_number} (call_type={call_type or 'n/a'})")
+                result = await self._make_request(
+                    "GET", token_url, headers=headers, params=params)
+
+                if not result.get("error"):
+                    # Some APIs wrap results in { config: {...} } or { data: {...} }
+                    return result.get("config") or result.get("data") or result
+                else:
+                    print(
+                        f"Failed to fetch token-based config for {phone_number}: {result.get('message')}")
+            except Exception as e:
+                print(f"Token-based config fetch failed: {e}")
+
+        return None
 
 
 # Global API client instance
 api_client = APIClient()
+
+
+def ensure_https_url(url: str) -> str:
+    """
+    Ensures a URL uses HTTPS protocol instead of HTTP
+
+    Args:
+        url: The URL to check and potentially modify
+
+    Returns:
+        URL with HTTPS protocol
+    """
+    if url and url.startswith("http://"):
+        return url.replace("http://", "https://", 1)
+    return url
+
+
+async def query_knowledge_base(query: str, context: Dict[str, Any] = None) -> str:
+    """
+    Mock function to replace external vector database query
+
+    Args:
+        query: User's question or request
+        context: Additional context about the conversation
+
+    Returns:
+        Mock response for the agent to use
+    """
+    return "I don't have specific information about that right now. Let me see how else I can help you."
+
+
+async def execute_api_action(action: str, parameters: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Mock function to replace external API actions
+
+    Args:
+        action: Action type (book_appointment, check_availability, etc.)
+        parameters: Action parameters
+
+    Returns:
+        Mock action result
+    """
+    return {
+        "success": False,
+        "message": f"External API actions are not available: {action}"
+    }
