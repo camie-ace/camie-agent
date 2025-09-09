@@ -13,7 +13,7 @@ import re
 
 
 class APIClient:
-    """Client for making external API calls"""
+    """Client for making external API calls to the Voice Config API"""
 
     def __init__(self):
         self.session = None
@@ -24,8 +24,9 @@ class APIClient:
 
     async def __aenter__(self):
         """Async context manager entry"""
+        print("DEBUG: Creating new aiohttp.ClientSession with base headers:",
+              self.base_headers)
         self.session = aiohttp.ClientSession(
-            headers=self.base_headers,
             timeout=aiohttp.ClientTimeout(total=30)
         )
         return self
@@ -47,6 +48,8 @@ class APIClient:
         try:
             async with self.session.request(method, url, **kwargs) as response:
                 response_text = await response.text()
+                print(f"DEBUG: Response status code: {response.status}")
+                print(f"DEBUG: Response headers: {dict(response.headers)}")
 
                 if response.status >= 400:
                     print(f"API Error {response.status}: {response_text}")

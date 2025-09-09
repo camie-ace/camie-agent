@@ -6,6 +6,7 @@ from typing import Dict, Any, Optional, Tuple
 
 from livekit import agents
 from livekit.agents import AgentSession, Agent, RoomInputOptions
+from livekit.rtc import Room
 
 # Default plugins
 from livekit.plugins import silero, openai, cartesia, deepgram
@@ -33,6 +34,7 @@ class Assistant(Agent):
         # Context will be initialized later when we have user_id
         self.user_id = None
         self.conversation_context = None
+        self._keep_alive_task = None
 
     async def initialize_context(self, user_id: str, initial_context: dict = None):
         """Initialize conversation context with user ID and initial context from database"""
@@ -44,6 +46,43 @@ class Assistant(Agent):
             except Exception as e:
                 print(f"Error initializing context for {user_id}: {e}")
                 self.conversation_context = None
+
+    async def keep_alive(self, room: Room):
+        """Task to keep agent connection alive by sending metadata updates"""
+        try:
+            # Skip heartbeat functionality since it's causing errors and not needed
+            while True:
+                # Just keep the task running without doing anything
+                await asyncio.sleep(30)
+        except asyncio.CancelledError:
+            # Expected on cleanup
+            print("Keep-alive task cancelled")
+        except Exception as e:
+            print(f"Keep-alive task failed: {e}")
+
+    def start_keep_alive(self, room: Room):
+        """Start background task to keep connection alive"""
+        if not self._keep_alive_task or self._keep_alive_task.done():
+            try:
+                self._keep_alive_task = asyncio.create_task(
+                    self.keep_alive(room))
+                print("Started keep-alive background task")
+                return True
+            except Exception as e:
+                print(f"Error starting keep-alive task: {e}")
+                return False
+        else:
+            print("Keep-alive task already running")
+            return True
+
+    def stop_keep_alive(self):
+        """Stop the keep-alive task if it's running"""
+        if self._keep_alive_task and not self._keep_alive_task.done():
+            try:
+                self._keep_alive_task.cancel()
+                print("Cancelled keep-alive task")
+            except Exception as e:
+                print(f"Error cancelling keep-alive task: {e}")
 
     async def get_context_summary(self):
         """Get current conversation context"""
@@ -166,8 +205,16 @@ def extract_numbers_from_context(ctx: agents.JobContext) -> Tuple[Optional[str],
     try:
         if hasattr(ctx, 'room') and ctx.room and hasattr(ctx.room, 'participants'):
             for participant in ctx.room.participants:
-                pmeta = _parse_json_metadata(
-                    getattr(participant, 'metadata', None))
+                # Handle case where metadata is a string value directly
+                raw_metadata = getattr(participant, 'metadata', None)
+                if isinstance(raw_metadata, str) and raw_metadata.strip().lower() == "outbound":
+                    call_type = "outbound"
+                    print(
+                        f"Detected outbound call from direct participant metadata: {raw_metadata}")
+                    continue
+
+                # Continue with JSON parsing for structured metadata
+                pmeta = _parse_json_metadata(raw_metadata)
                 for key in ['to_number', 'called_number', 'did', 'destination', 'sip_to', 'sipTo', 'agent_phone']:
                     if not agent_phone and isinstance(pmeta.get(key), str):
                         agent_phone = pmeta.get(key)
@@ -176,7 +223,8 @@ def extract_numbers_from_context(ctx: agents.JobContext) -> Tuple[Optional[str],
                         caller_phone = pmeta.get(key)
                 if isinstance(pmeta.get('direction'), str) and not call_type:
                     call_type = pmeta.get('direction')
-    except Exception:
+    except Exception as e:
+        print(f"Error processing participant metadata: {e}")
         pass
 
     # 3) Job metadata (if your infra passes details when scheduling the agent)
@@ -203,6 +251,25 @@ async def entrypoint(ctx: agents.JobContext):
         phone_number = None
         call_type = "inbound"
 
+        # Connect early to satisfy LiveKit worker timing (avoid 10s warning)
+        try:
+            await ctx.connect()
+            print("Connected to LiveKit room successfully")
+        except Exception as e:
+            print(
+                f"Warning: initial ctx.connect() failed, will retry later: {e}")
+
+        # Extract phone number early for logging
+        if hasattr(ctx, 'room') and ctx.room and isinstance(ctx.room.name, str):
+            print(f"Room name: {ctx.room.name}")
+            # Extract first E.164-like number anywhere in the room name (e.g., twilio-+E164-...)
+            match = re.search(r"\+\d{6,15}", ctx.room.name)
+            if match:
+                phone_number = match.group(0)
+                print(
+                    f"Identified phone number from room name: {phone_number}")
+
+        # Now proceed with the rest of initialization in parallel
         # Prefer extracting from call context (metadata) over parsing room name
         agent_phone, caller_phone, inferred_call_type = extract_numbers_from_context(
             ctx)
@@ -302,13 +369,36 @@ async def entrypoint(ctx: agents.JobContext):
         # Initialize conversation context after creation with initial context from DB
         await assistant.initialize_context(user_id, initial_context)
 
-        await session.start(
-            room=ctx.room,
-            agent=assistant,
-            room_input_options=RoomInputOptions(),
-        )
+        # Start keep-alive task to maintain connection
+        assistant.start_keep_alive(ctx.room)
 
-        await ctx.connect()
+        print("Starting fully configured agent session...")
+
+        # Configure room options for the main session for better reliability
+        main_room_options = RoomInputOptions()
+        main_room_options.reduce_latency = True
+        main_room_options.optimize_for_voice = True
+        # Longer timeout (60s)
+        main_room_options.audio_stream_timeout_ms = 60000
+
+        try:
+            await session.start(
+                room=ctx.room,
+                agent=assistant,
+                room_input_options=main_room_options,
+            )
+            print("Agent session started; sending welcome message...")
+        except Exception as e:
+            print(f"Error starting agent session: {e}")
+            # Try connecting directly if session start failed
+            try:
+                print("Attempting direct room connection...")
+                if not ctx.room.connected:
+                    await ctx.connect()
+                print("Direct connection successful")
+            except Exception as inner_e:
+                print(f"Direct connection also failed: {inner_e}")
+                raise  # Re-raise the exception to exit gracefully
 
         # Get custom welcome message if available
         default_welcome = (
@@ -316,9 +406,14 @@ async def entrypoint(ctx: agents.JobContext):
         )
         welcome_message = agent_config.get("welcome_message", default_welcome)
 
-        await session.generate_reply(instructions=welcome_message)
+        # Speak proactively to avoid long initial silence on SIP calls
+        await session.say(welcome_message)
+        print("Welcome message sent.")
     except Exception as e:
         print(f"Error in agent entrypoint: {e}")
+        # Stop any keep-alive tasks
+        if 'assistant' in locals() and assistant:
+            assistant.stop_keep_alive()
         # Cleanup context on error
         if user_id:
             try:

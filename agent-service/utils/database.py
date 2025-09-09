@@ -12,6 +12,118 @@ from typing import Dict, Any, Optional
 from .api_client import APIClient
 
 
+# Default configuration values for fallbacks
+DEFAULT_STT_CONFIG = "DEEPGRAM_NOVA2_EN"
+DEFAULT_LLM_CONFIG = "OPENAI_GPT4O_MINI"
+DEFAULT_TTS_CONFIG = "CARTESIA_DEFAULT_EN"
+
+
+def transform_api_config(api_config: Dict[str, Any], call_type: str) -> Dict[str, Any]:
+    """
+    Transform API configuration to match agent's expected format.
+
+    Args:
+        api_config: Configuration from API
+        call_type: "inbound" or "outbound"
+
+    Returns:
+        Transformed configuration in agent format
+    """
+    print(f"Transforming API config: {api_config}")
+
+    # Start with default structure
+    agent_config = {
+        "assistant_instructions": "",
+        "welcome_message": "",
+        "stt_config_key": DEFAULT_STT_CONFIG,
+        "llm_config_key": DEFAULT_LLM_CONFIG,
+        "tts_config_key": DEFAULT_TTS_CONFIG,
+        "initial_context": {
+            "stage": "greeting",
+            "required_fields": []
+        },
+        "business_config": {
+            "business_type": "default",
+            "required_fields": [],
+            "stage_map": {"greeting": 1},
+            "question_map": {}
+        }
+    }
+
+    # Map API fields to agent configuration
+    # Assistant instructions
+    agent_config["assistant_instructions"] = api_config.get(
+        "assistant_instruction", "")
+
+    # Welcome message
+    if api_config.get("static_message"):
+        agent_config["welcome_message"] = api_config.get(
+            "static_message", "Hello, how can I help you?")
+
+    # STT Configuration (with fallback)
+    if api_config.get("transcription_provider"):
+        # Map API transcription provider to our format
+        provider = api_config.get("transcription_provider", "").lower()
+        if "deepgram" in provider:
+            agent_config["stt_config_key"] = "DEEPGRAM_NOVA2_EN"
+            # Use language-specific model if specified
+            if api_config.get("agent_language", "").lower() == "french":
+                agent_config["stt_config_key"] = "DEEPGRAM_NOVA2_FR"
+
+    # TTS Configuration (with fallback)
+    if api_config.get("voice_provider"):
+        provider = api_config.get("voice_provider", "").lower()
+        voice_id = api_config.get("voice", "")
+        language = api_config.get("agent_language", "").lower()
+
+        if "elevenlabs" in provider and voice_id:
+            # Use a recognized format for ElevenLabs voices
+            # The agent expects a predefined key, not a dynamic one with the voice ID
+            agent_config["tts_config_key"] = "ELEVENLABS_DEFAULT_EN"
+            # Store the actual voice ID in voice_settings for later use
+            agent_config["voice_settings"]["voice_id"] = voice_id
+        elif "cartesia" in provider:
+            if language == "french":
+                agent_config["tts_config_key"] = "CARTESIA_DEFAULT_FR"
+            else:
+                agent_config["tts_config_key"] = "CARTESIA_DEFAULT_EN"
+
+    # Voice settings
+    agent_config["voice_settings"] = {
+        # Default to 100 if not specified
+        "speed": api_config.get("voice_speed", 100),
+        "stability": api_config.get("stability", 0),
+        "clarity_similarity": api_config.get("clarity_similarity", 0),
+        "voice_improvement": api_config.get("voice_improvement", False)
+    }
+
+    # Initial context
+    agent_config["initial_context"] = {
+        "stage": "greeting",
+        "required_fields": [],
+        # Convert to seconds, minimum 300 seconds (5 minutes)
+        "call_duration_seconds": max(api_config.get("max_call_duration", 300), 300),
+        # Set a longer silence timeout, minimum 10 seconds
+        "silence_timeout_seconds": max(api_config.get("silence_duration", 10), 10),
+        # Only end on silence if explicitly requested
+        "end_on_silence": api_config.get("end_call_on_silence", False)
+    }
+
+    # Business config
+    agent_config["business_config"] = {
+        "business_type": api_config.get("sector", "default").lower().replace(" ", "_"),
+        "agent_name": api_config.get("agent_name", "AI Assistant"),
+        "language": api_config.get("agent_language", "english").lower(),
+        "workflow": api_config.get("workflow", "agentic"),
+        "required_fields": [],
+        "stage_map": {"greeting": 1, "conversation": 2, "closing": 3},
+        "question_map": {}
+    }
+
+    print(f"Transformed config: {agent_config}")
+    return agent_config
+
+
 # Mock database table for agent configurations
 # Each phone number maps to a dict with 'inbound' and 'outbound' keys
 AGENT_CONFIG_DB: Dict[str, Dict[str, Dict[str, Any]]] = {
@@ -351,7 +463,11 @@ When customers ask questions:
 
 async def get_agent_config_from_db_by_phone(phone_number: str, call_type: str = "inbound") -> Optional[Dict[str, Any]]:
     """
-    Simulates fetching an agent's configuration from a database using a phone number and call type.
+    Fetches an agent's configuration using a phone number and call type.
+
+    Workflow:
+    1. Try to get configuration from VOICE_CONFIG_TOKEN_URL using JWT
+    2. Fall back to hardcoded configuration if API call fails
 
     Args:
         phone_number: The phone number that received the call.

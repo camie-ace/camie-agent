@@ -6,7 +6,20 @@ Handles client context, information collection, business logic, and API integrat
 import asyncio
 from typing import Dict, Any, Optional, List
 from datetime import datetime
-from .api_client import query_knowledge_base, execute_api_action
+
+# Stubs for removed API functions
+async def query_knowledge_base(query: str, context: Dict[str, Any] = None) -> str:
+    """Stub replacement for removed function"""
+    print(f"[STUB] query_knowledge_base called with: {query}")
+    return "I don't have specific information about that right now. Let me see how else I can help you."
+
+async def execute_api_action(action: str, parameters: Dict[str, Any]) -> Dict[str, Any]:
+    """Stub replacement for removed function"""
+    print(f"[STUB] execute_api_action called with action: {action}")
+    return {
+        "success": False,
+        "message": f"The {action} functionality is not available at this time."
+    }
 
 
 class DynamicBusinessAgent:
