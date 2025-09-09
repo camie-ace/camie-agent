@@ -51,14 +51,10 @@ class Assistant(Agent):
     async def keep_alive(self, room: Room):
         """Task to keep agent connection alive by sending metadata updates"""
         try:
+            # Skip heartbeat functionality since it's causing errors and not needed
             while True:
-                await asyncio.sleep(10)
-                print("Agent connection heartbeat...")
-                try:
-                    # Send a minimal metadata update to maintain the connection
-                    await room.local_participant.publish_metadata("{}")
-                except Exception as e:
-                    print(f"Heartbeat metadata update failed: {e}")
+                # Just keep the task running without doing anything
+                await asyncio.sleep(30)
         except asyncio.CancelledError:
             # Expected on cleanup
             print("Keep-alive task cancelled")
