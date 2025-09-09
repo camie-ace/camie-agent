@@ -88,6 +88,11 @@ class APIClient:
         """
         # Only use VOICE_CONFIG_TOKEN_URL for config fetching
         token_url = os.getenv("VOICE_CONFIG_TOKEN_URL")
+        # Ensure we're using HTTPS to avoid redirect issues
+        if token_url and token_url.startswith("http://"):
+            token_url = "https://" + token_url[7:]
+            print(f"Converted token URL to HTTPS: {token_url}")
+
         jwt_secret = os.getenv("JWT_SECRET")
 
         if not token_url or not jwt_secret:
