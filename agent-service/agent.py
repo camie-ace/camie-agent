@@ -3,6 +3,8 @@ from dotenv import load_dotenv
 import re
 import json
 from typing import Dict, Any, Optional, Tuple
+import traceback
+from datetime import datetime
 
 from livekit import agents
 from livekit.agents import AgentSession, Agent, RoomInputOptions
@@ -39,26 +41,39 @@ class Assistant(Agent):
     async def initialize_context(self, user_id: str, initial_context: dict = None):
         """Initialize conversation context with user ID and initial context from database"""
         self.user_id = user_id
-        if user_id and user_id != "default_user":
-            try:
-                self.conversation_context = await get_context_for_user(user_id, initial_context)
-                print(f"Initialized conversation context for user: {user_id}")
-            except Exception as e:
-                print(f"Error initializing context for {user_id}: {e}")
-                self.conversation_context = None
+        try:
+            self.conversation_context = await get_context_for_user(user_id, initial_context or {})
+            print(f"Initialized conversation context for user: {user_id}")
+        except Exception as e:
+            print(f"Error initializing context for {user_id}: {e}")
+            self.conversation_context = None
 
     async def keep_alive(self, room: Room):
         """Task to keep agent connection alive by sending metadata updates"""
         try:
-            # Skip heartbeat functionality since it's causing errors and not needed
+            # Keep connection alive with simple heartbeats
+            counter = 0
             while True:
-                # Just keep the task running without doing anything
-                await asyncio.sleep(30)
+                try:
+                    # Send a simple metadata update to show we're still alive
+                    counter += 1
+                    await room.local_participant.update_metadata(
+                        json.dumps({"heartbeat": counter, "timestamp": str(
+                            datetime.now().isoformat())})
+                    )
+                    print(
+                        f"Sent heartbeat #{counter} to keep connection alive")
+                except Exception as e:
+                    print(f"Error sending heartbeat: {e}")
+
+                # Wait before next heartbeat
+                await asyncio.sleep(20)
         except asyncio.CancelledError:
             # Expected on cleanup
             print("Keep-alive task cancelled")
         except Exception as e:
             print(f"Keep-alive task failed: {e}")
+            print(f"Keep-alive exception details: {traceback.format_exc()}")
 
     def start_keep_alive(self, room: Room):
         """Start background task to keep connection alive"""
@@ -166,7 +181,10 @@ class Assistant(Agent):
         return {"success": False, "message": "User context not available"}
 
 
+# Utility functions below this line
+
 def _parse_json_metadata(meta: Optional[str]) -> Dict[str, Any]:
+    """Safely parse JSON-encoded metadata strings into dicts."""
     """Safely parse JSON-encoded metadata strings into dicts."""
     if not meta or not isinstance(meta, str):
         return {}
@@ -346,12 +364,17 @@ async def entrypoint(ctx: agents.JobContext):
                 language='fr', voice="5c3c89e5-535f-43ef-b14d-f8ffe148c1f0")
 
         # Create the agent session with plugins
+        print("DEBUG: Creating AgentSession with plugins")
         session = AgentSession(
             stt=stt_plugin,
             llm=llm_plugin,
             tts=tts_plugin,
             vad=silero.VAD.load(min_silence_duration=0.55),
             turn_detection=MultilingualModel(),
+            # Set a shorter response timeout to prevent hanging
+            response_timeout_seconds=45,
+            # Set a longer start timeout to allow for connection setup
+            start_timeout_seconds=60,
         )
 
         # Get custom instructions if available
@@ -378,8 +401,10 @@ async def entrypoint(ctx: agents.JobContext):
         main_room_options = RoomInputOptions()
         main_room_options.reduce_latency = True
         main_room_options.optimize_for_voice = True
-        # Longer timeout (60s)
-        main_room_options.audio_stream_timeout_ms = 60000
+        # Longer timeout (120s instead of 60s)
+        main_room_options.audio_stream_timeout_ms = 120000  # 2 minutes
+        # Set reconnect attempts
+        main_room_options.reconnect_attempts = 3
 
         try:
             await session.start(
@@ -390,6 +415,7 @@ async def entrypoint(ctx: agents.JobContext):
             print("Agent session started; sending welcome message...")
         except Exception as e:
             print(f"Error starting agent session: {e}")
+            print(f"Exception details: {traceback.format_exc()}")
             # Try connecting directly if session start failed
             try:
                 print("Attempting direct room connection...")
@@ -398,6 +424,8 @@ async def entrypoint(ctx: agents.JobContext):
                 print("Direct connection successful")
             except Exception as inner_e:
                 print(f"Direct connection also failed: {inner_e}")
+                print(
+                    f"Direct connection exception details: {traceback.format_exc()}")
                 raise  # Re-raise the exception to exit gracefully
 
         # Get custom welcome message if available
@@ -406,9 +434,12 @@ async def entrypoint(ctx: agents.JobContext):
         )
         welcome_message = agent_config.get("welcome_message", default_welcome)
 
+        print("DEBUG: Generating initial reply")
         # Speak proactively to avoid long initial silence on SIP calls
         await session.say(welcome_message)
         print("Welcome message sent.")
+
+        print("DEBUG: Entrypoint completed successfully")
     except Exception as e:
         print(f"Error in agent entrypoint: {e}")
         # Stop any keep-alive tasks
@@ -420,9 +451,11 @@ async def entrypoint(ctx: agents.JobContext):
                 await cleanup_context(user_id)
             except:  # noqa: E722
                 pass
+        print(f"Traceback: {traceback.format_exc()}")
         raise  # Re-raise the exception so LiveKit can handle it
 
 
 if __name__ == "__main__":
     # Let LiveKit CLI manage the event loop
+    print("Starting agent application")
     agents.cli.run_app(agents.WorkerOptions(entrypoint_fnc=entrypoint))
