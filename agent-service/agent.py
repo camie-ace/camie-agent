@@ -383,10 +383,6 @@ async def entrypoint(ctx: agents.JobContext):
             tts=tts_plugin,
             vad=silero.VAD.load(min_silence_duration=0.55),
             turn_detection=MultilingualModel(),
-            # Set a shorter response timeout to prevent hanging
-            response_timeout_seconds=45,
-            # Set a longer start timeout to allow for connection setup
-            start_timeout_seconds=60,
         )
 
         # Get custom instructions if available
