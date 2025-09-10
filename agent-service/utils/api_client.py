@@ -27,7 +27,10 @@ class APIClient:
         print("DEBUG: Creating new aiohttp.ClientSession with base headers:",
               self.base_headers)
         self.session = aiohttp.ClientSession(
-            timeout=aiohttp.ClientTimeout(total=30)
+            headers=self.base_headers,
+            timeout=aiohttp.ClientTimeout(total=30),
+            # Disable SSL verification for testing
+            connector=aiohttp.TCPConnector(ssl=False)
         )
         return self
 
@@ -92,11 +95,19 @@ class APIClient:
             try:
                 jwt_payload = {"phone_number": phone_number}
                 token = jwt.encode(jwt_payload, jwt_secret, algorithm="HS256")
+
+                # Ensure we have the correct format for JWT Authorization header
+                if isinstance(token, bytes):
+                    token = token.decode('utf-8')
+
                 headers = {"Authorization": f"Bearer {token}"}
                 params = {"call_type": call_type} if call_type else None
 
                 print(
                     f"Fetching agent config by token for: {phone_number} (call_type={call_type or 'n/a'})")
+                print(f"DEBUG: Request URL: {token_url}")
+                print(f"DEBUG: Request headers: {headers}")
+                print(f"DEBUG: Request params: {params}")
                 result = await self._make_request(
                     "GET", token_url, headers=headers, params=params)
 

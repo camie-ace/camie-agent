@@ -1,16 +1,50 @@
 """
-Mock Redis utilities module
+Stub implementation of Redis utilities
 
-This module provides dummy functions to replace Redis integration.
-All Redis caching has been removed from the codebase.
+This module provides non-functional stubs for Redis-related functions.
+These stubs allow the application to run without an actual Redis dependency.
 """
+
+import os
+
+# No actual Redis import
+REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
+redis_pool = None
+
+
+async def get_redis_pool_instance():
+    """
+    Stub for initializing a Redis connection pool.
+    Raises NotImplementedError to prevent actual use.
+    """
+    print("WARNING: Redis functionality is disabled. Using stub implementation.")
+    return None
 
 
 async def get_redis_connection():
-    """Dummy function to replace Redis connection"""
-    raise NotImplementedError("Redis connection is not available")
+    """
+    Stub for getting a Redis connection.
+    Raises NotImplementedError to prevent actual use.
+    """
+    print("WARNING: Redis functionality is disabled. Using stub implementation.")
+
+    class MockRedis:
+        async def get(self, key):
+            return None
+
+        async def set(self, key, value, ex=None):
+            return None
+
+        async def delete(self, key):
+            return None
+
+    return MockRedis()
 
 
 async def close_redis_pool():
-    """Dummy function to close Redis connection pool"""
-    pass
+    """
+    Stub for closing a Redis connection pool.
+    Does nothing since there's no actual pool.
+    """
+    print("WARNING: Redis functionality is disabled. Using stub implementation.")
+    return None
