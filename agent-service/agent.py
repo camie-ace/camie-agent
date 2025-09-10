@@ -9,6 +9,7 @@ from datetime import datetime
 from livekit import agents
 from livekit.agents import AgentSession, Agent, RoomInputOptions
 from livekit.rtc import Room
+from livekit.rtc import Room
 
 # Default plugins
 from livekit.plugins import silero, openai, cartesia, deepgram
@@ -17,6 +18,12 @@ from livekit.plugins.turn_detector.multilingual import MultilingualModel
 # All plugin instantiation is handled by the factory
 from config.config_definitions import DEFAULT_SETTINGS
 from utils.plugin_factory import create_stt_plugin, create_llm_plugin, create_tts_plugin
+from utils.context_manager import get_context_for_user, cleanup_context
+from utils.database import get_agent_config_from_db_by_phone
+from utils.business_tools import (
+    query_user_information, book_user_appointment,
+    check_user_availability, update_user_crm
+)
 from utils.context_manager import get_context_for_user, cleanup_context
 from utils.database import get_agent_config_from_db_by_phone
 from utils.business_tools import (
@@ -350,7 +357,11 @@ async def entrypoint(ctx: agents.JobContext):
         user_id = f"session_{sid_str}"
 
         # Create plugins based on the loaded agent_config
+        # Create plugins based on the loaded agent_config
         try:
+            stt_plugin = create_stt_plugin(agent_config)
+            llm_plugin = create_llm_plugin(agent_config)
+            tts_plugin = create_tts_plugin(agent_config)
             stt_plugin = create_stt_plugin(agent_config)
             llm_plugin = create_llm_plugin(agent_config)
             tts_plugin = create_tts_plugin(agent_config)
@@ -358,6 +369,7 @@ async def entrypoint(ctx: agents.JobContext):
             print(f"Error creating custom plugins from settings: {e}")
             print("Falling back to default plugin configuration")
             # Fall back to default plugins if there's an issue with settings
+            stt_plugin = deepgram.STT(model="nova-2-general", language="fr")
             stt_plugin = deepgram.STT(model="nova-2-general", language="fr")
             llm_plugin = openai.LLM(model="gpt-4o-mini")
             tts_plugin = cartesia.TTS(
@@ -429,6 +441,10 @@ async def entrypoint(ctx: agents.JobContext):
                 raise  # Re-raise the exception to exit gracefully
 
         # Get custom welcome message if available
+        default_welcome = (
+            "Bonjour, je suis Pascal de Pôle démarches. je vous appelle suite à votre demande liée à l'obtention d'un logement social de type HLM"
+        )
+        welcome_message = agent_config.get("welcome_message", default_welcome)
         default_welcome = (
             "Bonjour, je suis Pascal de Pôle démarches. je vous appelle suite à votre demande liée à l'obtention d'un logement social de type HLM"
         )
