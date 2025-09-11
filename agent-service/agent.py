@@ -11,7 +11,7 @@ from livekit.plugins import (
 )
 from livekit.plugins.turn_detector.multilingual import MultilingualModel
 
-load_dotenv(".env.local")
+load_dotenv()
 
 
 class Assistant(Agent):
