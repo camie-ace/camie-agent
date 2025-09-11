@@ -12,7 +12,7 @@ This document explains how the agent configuration is dynamically loaded based o
 ## Process Flow
 
 1. When a job request is received, the agent extracts the phone number from the room name
-   (format: `twilio-+12345678901-XXXXX`)
+   (format: `twilio-+12345678901-XXXXX`) through `ctx.job.request.room_name`
 
 2. The phone number is used to create a JWT token using the JWT_SECRET and JWT_ALGORITHM from
    environment variables
@@ -105,3 +105,13 @@ To test the model factory functionality:
 ```bash
 python -m unittest test_model_factory
 ```
+
+## Troubleshooting
+
+### Common Issues
+
+1. **Room Name Access**: If you see an error like `'JobContext' object has no attribute 'room_name'`, make sure you're accessing the room name correctly via `ctx.job.request.room_name` instead of directly from the context.
+
+2. **API Connection Errors**: If configuration retrieval fails, check your network connection and ensure `VOICE_CONFIG_TOKEN_URL` is correctly set and accessible.
+
+3. **JWT Token Issues**: Verify that `JWT_SECRET` and `JWT_ALGORITHM` are properly configured in your environment variables.
