@@ -28,8 +28,18 @@ async def entrypoint(ctx: agents.JobContext):
     await ctx.connect()
 
     # Extract room name from job context
-    room_name = ctx.room_name
-    logger.info(f"Processing job request for room: {room_name}")
+    # The correct way to access room_name is through ctx.job.request.room_name
+    try:
+        room_name = ctx.job.request.room_name
+        logger.info(f"Processing job request for room: {room_name}")
+    except AttributeError as e:
+        # Handle case where job request structure is different than expected
+        logger.error(f"Failed to access room_name: {e}")
+        logger.info(f"Job context: {ctx}")
+        # Try to extract from debug info
+        room_name = str(ctx.job).split("room_name=")[1].split(
+            ",")[0] if "room_name=" in str(ctx.job) else "unknown"
+        logger.info(f"Extracted room name from debug info: {room_name}")
 
     # Get participant metadata if available
     participant_metadata = None
