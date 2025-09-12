@@ -176,7 +176,7 @@ def create_llm_plugin(user_settings: Dict[str, Any]):
     if provider == "openai":
         param_mapping = {"model": "model", "temperature": "temperature"}
         api_key = "OPENAI_API_KEY"
-    elif provider == "anthropic":  # Example of another provider
+    elif provider == "anthropic":
         param_mapping = {"model": "model_name", "temperature": "temperature"}
         api_key = "ANTHROPIC_API_KEY"
     else:
