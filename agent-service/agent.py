@@ -12,6 +12,7 @@ from livekit.plugins import (
 from livekit.plugins.turn_detector.multilingual import MultilingualModel
 from utils.config_fetcher import get_agent_config_from_room
 from utils.model_factory import ModelFactory
+from utils.room_extractor import extract_room_name, extract_phone_number
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -27,19 +28,17 @@ class Assistant(Agent):
 async def entrypoint(ctx: agents.JobContext):
     await ctx.connect()
 
-    # Extract room name from job context
-    # The correct way to access room_name is through ctx.job.request.room_name
-    try:
-        room_name = ctx.job.request.room_name
-        logger.info(f"Processing job request for room: {room_name}")
-    except AttributeError as e:
-        # Handle case where job request structure is different than expected
-        logger.error(f"Failed to access room_name: {e}")
-        logger.info(f"Job context: {ctx}")
-        # Try to extract from debug info
-        room_name = str(ctx.job).split("room_name=")[1].split(
-            ",")[0] if "room_name=" in str(ctx.job) else "unknown"
-        logger.info(f"Extracted room name from debug info: {room_name}")
+    # Extract room name using our utility function
+    room_name = extract_room_name(ctx)
+    logger.info(f"Processing job request for room: {room_name}")
+
+    # Extract phone number from room name
+    phone_number = extract_phone_number(room_name)
+    if phone_number:
+        logger.info(f"Extracted phone number: {phone_number}")
+    else:
+        logger.warning(
+            f"Could not extract phone number from room name: {room_name}")
 
     # Get participant metadata if available
     participant_metadata = None
