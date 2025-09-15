@@ -42,6 +42,14 @@ async def entrypoint(ctx: agents.JobContext):
 
     # Get participant metadata if available
     participant_metadata = None
+    logger.info(f"Room: {ctx.room}")
+    if ctx.room:
+        logger.info(f"Local participant: {ctx.room.local_participant}")
+        if ctx.room.local_participant:
+            logger.info(
+                f"Metadata type: {type(ctx.room.local_participant.metadata)}")
+            logger.info(
+                f"Metadata value: {ctx.room.local_participant.metadata}")
     if ctx.room and ctx.room.local_participant and ctx.room.local_participant.metadata:
         try:
             metadata_str = ctx.room.local_participant.metadata
