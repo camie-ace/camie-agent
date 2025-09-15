@@ -122,7 +122,7 @@ async def get_agent_config_from_room(room_name: str, participant_metadata: Optio
     # Extract call direction from metadata if available
     call_direction = None
     if participant_metadata and isinstance(participant_metadata, dict):
-        call_direction = participant_metadata.get("direction")
+        call_direction = participant_metadata.get("direction") or "inbound"
 
     try:
         config, detected_direction = await fetch_agent_config_by_phone(phone_number, call_direction)
