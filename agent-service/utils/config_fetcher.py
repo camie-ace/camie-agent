@@ -20,8 +20,11 @@ async def extract_phone_from_room_name(room_name: str) -> Optional[str]:
     Returns:
         Extracted phone number or None if not found
     """
+    if not room_name:
+        return None
+
     # Pattern to match phone numbers in format: twilio-+12345678901-XXXXX
-    pattern = r'twilio-(\+\d+)-'
+    pattern = r'twilio-(\+?\d+)-'
     match = re.search(pattern, room_name)
 
     if match:
@@ -78,15 +81,31 @@ async def fetch_agent_config_by_phone(phone_number: str, call_direction: Optiona
         headers = {"Authorization": f"Bearer {token}"}
 
         print(
-            f"Fetching agent config for phone: {phone_number}, direction: {call_direction or 'unknown'}")
+            f"Fetching agent config for phone: {phone_number}, direction: {call_direction or 'inbound'}")
         result = await client._make_request("GET", config_url, headers=headers)
 
-        if result.get("error"):
-            print(f"Error fetching configuration: {result.get('message')}")
+        if result.get("error") or result.get("responseCode") != "00":
+            error_message = result.get("message") or result.get(
+                "description") or "Unknown error"
+            print(f"Error fetching configuration: {error_message}")
             return {}, None
 
-        # Extract the phone_number object from the response
-        phone_config = result.get("phone_number", {})
+        # Extract the phone config from the data field containing the phone number object
+        data = result.get("data", {})
+
+        # Look for the phone number in the data
+        # The phone number might be with or without a plus, so check both formats
+        phone_config = data.get(phone_number, None)
+        if phone_config is None and phone_number.startswith('+'):
+            # Try without the plus
+            phone_config = data.get(phone_number[1:], None)
+        if phone_config is None and not phone_number.startswith('+'):
+            # Try with the plus
+            phone_config = data.get(f"+{phone_number}", None)
+
+        if not phone_config:
+            print(f"No configuration found for phone number: {phone_number}")
+            return {}, None
 
         # If call_direction is provided, use it to get the specific config
         if call_direction and call_direction in phone_config:
@@ -122,14 +141,28 @@ async def get_agent_config_from_room(room_name: str, participant_metadata: Optio
     # Extract call direction from metadata if available
     call_direction = None
     if participant_metadata and isinstance(participant_metadata, dict):
-        call_direction = participant_metadata.get("direction") or "inbound"
+        call_direction = participant_metadata.get("direction")
+        if call_direction:
+            print(f"Using call direction from metadata: {call_direction}")
+        else:
+            print("No call direction found in metadata, defaulting to inbound")
+            call_direction = "inbound"
 
     try:
         config, detected_direction = await fetch_agent_config_by_phone(phone_number, call_direction)
 
-        if detected_direction and detected_direction != call_direction:
+        if not config:
+            print(
+                f"No configuration found for phone: {phone_number}, direction: {call_direction}")
+            return {}
+
+        if detected_direction and call_direction and detected_direction != call_direction:
             print(
                 f"Warning: Detected direction ({detected_direction}) differs from metadata direction ({call_direction})")
+
+        # Log the configuration keys we've received to help with debugging
+        config_keys = list(config.keys())
+        print(f"Received configuration with keys: {config_keys}")
 
         return config
     except Exception as e:
