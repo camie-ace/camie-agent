@@ -1,12 +1,13 @@
 """
 External API client for making HTTP requests to the voice config endpoint
 Handles fetching agent configuration from the token-based endpoint
+and sending call history data to the call history endpoint
 """
 
 import asyncio
 import aiohttp
 import json
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 import os
 import jwt
 import re
@@ -171,3 +172,66 @@ async def execute_api_action(action: str, parameters: Dict[str, Any]) -> Dict[st
         "success": False,
         "message": f"External API actions are not available: {action}"
     }
+
+
+async def send_call_history(call_data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Send call history data to the call history API endpoint
+
+    Args:
+        call_data: Complete call data including call_id, phone_number, call_type, etc.
+
+    Returns:
+        API response
+    """
+    endpoint = os.getenv("CALL_HISTORY_ENDPOINT")
+
+    if not endpoint:
+        print("Error: CALL_HISTORY_ENDPOINT environment variable not set")
+        return {"error": True, "message": "CALL_HISTORY_ENDPOINT not configured"}
+
+    # Ensure the URL uses HTTPS protocol
+    endpoint = ensure_https_url(endpoint)
+
+    # Get JWT secret for authorization if available
+    jwt_secret = os.getenv("JWT_SECRET")
+    headers = {}
+
+    if jwt_secret:
+        try:
+            # Create a JWT for authorization
+            jwt_payload = {
+                "phone_number": call_data.get("phone_number", "unknown"),
+                "timestamp": call_data.get("end_time") or call_data.get("start_time")
+            }
+            token = jwt.encode(jwt_payload, jwt_secret, algorithm="HS256")
+
+            # Ensure we have the correct format for JWT
+            if isinstance(token, bytes):
+                token = token.decode('utf-8')
+
+            headers["Authorization"] = f"Bearer {token}"
+        except Exception as e:
+            print(f"Failed to create JWT for call history: {e}")
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(endpoint, json=call_data, headers=headers) as response:
+                if response.status >= 400:
+                    error_text = await response.text()
+                    print(
+                        f"Call history API error {response.status}: {error_text}")
+                    return {
+                        "error": True,
+                        "status_code": response.status,
+                        "message": error_text
+                    }
+
+                try:
+                    return await response.json()
+                except json.JSONDecodeError:
+                    response_text = await response.text()
+                    return {"success": True, "data": response_text}
+    except Exception as e:
+        print(f"Error sending call history data: {e}")
+        return {"error": True, "message": str(e)}
