@@ -32,7 +32,7 @@ async def extract_phone_from_room_name(room_name: str) -> Optional[str]:
     return None
 
 
-async def create_phone_jwt(phone_number: str) -> str:
+async def create_phone_jwt(phone_number: str, direction: str, room_name: str) -> str:
     """
     Create a JWT token for the phone number using environment variables
 
@@ -48,7 +48,8 @@ async def create_phone_jwt(phone_number: str) -> str:
     if not jwt_secret:
         raise ValueError("JWT_SECRET not configured in environment variables")
 
-    payload = {"phone_number": phone_number}
+    payload = {"phone_number": phone_number,
+               direction: direction, "room_name": room_name}
     token = jwt.encode(payload, jwt_secret, algorithm=jwt_algorithm)
 
     # Handle PyJWT's different return types (bytes in older versions, str in newer versions)
@@ -71,7 +72,7 @@ async def fetch_agent_config_by_phone(phone_number: str, call_direction: Optiona
         Tuple of (agent_config, extracted_direction) where extracted_direction is from the API response
         if call_direction wasn't provided
     """
-    token = await create_phone_jwt(phone_number)
+    token = await create_phone_jwt(phone_number, call_direction, room_name)
     config_url = os.getenv("VOICE_CONFIG_TOKEN_URL")
 
     if not config_url:
