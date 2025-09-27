@@ -461,7 +461,7 @@ When customers ask questions:
 }
 
 
-async def get_agent_config_from_db_by_phone(phone_number: str, call_type: str = "inbound") -> Optional[Dict[str, Any]]:
+async def get_agent_config_from_db_by_phone(phone_number: str, call_type: str = "inbound", room_name: Optional[str] = None) -> Optional[Dict[str, Any]]:
     """
     Fetches an agent's configuration using a phone number and call type.
 
@@ -472,6 +472,7 @@ async def get_agent_config_from_db_by_phone(phone_number: str, call_type: str = 
     Args:
         phone_number: The phone number that received the call.
         call_type: "inbound" or "outbound" (default: "inbound")
+        room_name: Optional room name for the call
 
     Returns:
         A dictionary with the agent's configuration if found, otherwise None.
@@ -483,7 +484,7 @@ async def get_agent_config_from_db_by_phone(phone_number: str, call_type: str = 
     config_from_api = None
     try:
         async with APIClient() as client:
-            api_config = await client.fetch_agent_config(phone_number, call_type)
+            api_config = await client.fetch_agent_config(phone_number, call_type, room_name)
             if api_config and isinstance(api_config, dict):
                 # If API returns multi-call-type dict, select the requested call_type
                 if call_type in api_config and isinstance(api_config[call_type], dict):
@@ -516,13 +517,14 @@ async def get_agent_config_from_db_by_phone(phone_number: str, call_type: str = 
         return None
 
 
-async def get_agent_config_from_db(user_id: str, call_type: str = "inbound") -> Optional[Dict[str, Any]]:
+async def get_agent_config_from_db(user_id: str, call_type: str = "inbound", room_name: Optional[str] = None) -> Optional[Dict[str, Any]]:
     """
     Simulates fetching an agent's configuration from a database.
 
     Args:
         user_id: The ID of the user or agent configuration to fetch.
         call_type: "inbound" or "outbound" (default: "inbound")
+        room_name: Optional room name for the call
 
     Returns:
         A dictionary with the agent's configuration if found, otherwise None.
@@ -531,4 +533,4 @@ async def get_agent_config_from_db(user_id: str, call_type: str = "inbound") -> 
         f"DATABASE: Querying for agent config with user_id: {user_id}, call_type: {call_type}")
 
     # Delegate to phone-based getter (user_id may be a phone number or "default")
-    return await get_agent_config_from_db_by_phone(user_id, call_type)
+    return await get_agent_config_from_db_by_phone(user_id, call_type, room_name)

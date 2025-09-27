@@ -73,13 +73,14 @@ class APIClient:
         except Exception as e:
             return {"error": True, "message": str(e)}
 
-    async def fetch_agent_config(self, phone_number: str, call_type: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    async def fetch_agent_config(self, phone_number: str, call_type: Optional[str] = None, room_name: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """
         Fetch agent configuration from external API using token-based endpoint
 
         Args:
             phone_number: Phone number to get config for
             call_type: Optional call direction ("inbound" or "outbound")
+            room_name: Optional room name for the call
 
         Returns:
             Agent configuration or None
@@ -102,10 +103,17 @@ class APIClient:
                     token = token.decode('utf-8')
 
                 headers = {"Authorization": f"Bearer {token}"}
-                params = {"call_type": call_type} if call_type else None
+                params = {}
+                if call_type:
+                    params["call_type"] = call_type
+                if room_name:
+                    params["room_name"] = room_name
+
+                # Only pass params if we have any
+                params = params if params else None
 
                 print(
-                    f"Fetching agent config by token for: {phone_number} (call_type={call_type or 'n/a'})")
+                    f"Fetching agent config by token for: {phone_number} (call_type={call_type or 'n/a'}, room_name={room_name or 'n/a'})")
                 print(f"DEBUG: Request URL: {token_url}")
                 print(f"DEBUG: Request headers: {headers}")
                 print(f"DEBUG: Request params: {params}")

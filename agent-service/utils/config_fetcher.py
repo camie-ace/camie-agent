@@ -58,13 +58,14 @@ async def create_phone_jwt(phone_number: str) -> str:
     return token
 
 
-async def fetch_agent_config_by_phone(phone_number: str, call_direction: Optional[str] = None) -> Tuple[Dict[str, Any], Optional[str]]:
+async def fetch_agent_config_by_phone(phone_number: str, call_direction: Optional[str] = None, room_name: Optional[str] = None) -> Tuple[Dict[str, Any], Optional[str]]:
     """
     Fetch agent configuration from API using phone number
 
     Args:
         phone_number: The phone number to get configuration for
         call_direction: The call direction ("inbound" or "outbound") if known
+        room_name: Optional room name for the call
 
     Returns:
         Tuple of (agent_config, extracted_direction) where extracted_direction is from the API response
@@ -79,10 +80,18 @@ async def fetch_agent_config_by_phone(phone_number: str, call_direction: Optiona
 
     async with APIClient() as client:
         headers = {"Authorization": f"Bearer {token}"}
+        params = {}
+        if call_direction:
+            params["direction"] = call_direction
+        if room_name:
+            params["room_name"] = room_name
+
+        # Only pass params if we have any
+        params = params if params else None
 
         print(
-            f"Fetching agent config for phone: {phone_number}, direction: {call_direction or 'inbound'}")
-        result = await client._make_request("GET", config_url, headers=headers)
+            f"Fetching agent config for phone: {phone_number}, direction: {call_direction or 'inbound'}, room: {room_name or 'n/a'}")
+        result = await client._make_request("GET", config_url, headers=headers, params=params)
 
         if result.get("error") or result.get("responseCode") != "00":
             error_message = result.get("message") or result.get(
@@ -149,7 +158,7 @@ async def get_agent_config_from_room(room_name: str, participant_metadata: Optio
             call_direction = "inbound"
 
     try:
-        config, detected_direction = await fetch_agent_config_by_phone(phone_number, call_direction)
+        config, detected_direction = await fetch_agent_config_by_phone(phone_number, call_direction, room_name)
 
         if not config:
             print(
