@@ -105,7 +105,7 @@ class APIClient:
                 headers = {"Authorization": f"Bearer {token}"}
                 params = {}
                 if call_type:
-                    params["call_type"] = call_type
+                    params["direction"] = call_type
                 if room_name:
                     params["room_name"] = room_name
 
