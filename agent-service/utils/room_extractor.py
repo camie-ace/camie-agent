@@ -1,5 +1,12 @@
 """
-Utility functions for extracting room names and phone numbers from various sources
+Utility functions for extracting room names, phone numbers, and comprehensive 
+SIP data from LiveKit room contexts and metadata.
+
+Key functions:
+- extract_room_name(): Basic room name extraction
+- extract_phone_number(): Phone number extraction from room name
+- extract_comprehensive_room_data(): Complete SIP and room data extraction
+- log_all_available_data(): Debug function for exploring available data
 """
 
 import logging
@@ -110,3 +117,231 @@ def extract_phone_number(room_name):
         return "+" + number if len(number) > 9 else number
 
     return None
+
+
+def extract_comprehensive_room_data(ctx):
+    """
+    Extract comprehensive room data including SIP information and metadata
+
+    Args:
+        ctx: The JobContext object
+
+    Returns:
+        dict: Dictionary containing all available room and SIP data
+    """
+    room_data = {
+        "room_name": "unknown",
+        "sip_from": None,
+        "sip_to": None,
+        "sip_trunk_id": None,
+        "call_id": None,
+        "direction": None,
+        "participant_metadata": {},
+        "room_metadata": {},
+        "job_id": None,
+        "additional_attributes": {}
+    }
+
+    try:
+        # Extract basic room name
+        room_data["room_name"] = extract_room_name(ctx)
+
+        # Extract job ID if available
+        if hasattr(ctx, 'job') and hasattr(ctx.job, 'id'):
+            room_data["job_id"] = ctx.job.id
+            logger.debug(f"Job ID: {ctx.job.id}")
+
+        # Extract room-level data
+        if hasattr(ctx, 'room') and ctx.room is not None:
+            # Room metadata
+            if hasattr(ctx.room, 'metadata') and ctx.room.metadata:
+                try:
+                    import json
+                    if isinstance(ctx.room.metadata, str):
+                        room_data["room_metadata"] = json.loads(
+                            ctx.room.metadata)
+                    else:
+                        room_data["room_metadata"] = ctx.room.metadata
+                except (json.JSONDecodeError, AttributeError) as e:
+                    logger.debug(f"Could not parse room metadata: {e}")
+                    room_data["room_metadata"] = {
+                        "raw": str(ctx.room.metadata)}
+
+            # Extract participant metadata (this often contains SIP data)
+            if hasattr(ctx.room, 'local_participant') and ctx.room.local_participant:
+                if hasattr(ctx.room.local_participant, 'metadata') and ctx.room.local_participant.metadata:
+                    try:
+                        import json
+                        if isinstance(ctx.room.local_participant.metadata, str):
+                            room_data["participant_metadata"] = json.loads(
+                                ctx.room.local_participant.metadata)
+                        else:
+                            room_data["participant_metadata"] = ctx.room.local_participant.metadata
+                    except (json.JSONDecodeError, AttributeError) as e:
+                        logger.debug(
+                            f"Could not parse participant metadata: {e}")
+                        room_data["participant_metadata"] = {
+                            "raw": str(ctx.room.local_participant.metadata)}
+
+                # Extract SIP-related data from participant metadata
+                if room_data["participant_metadata"]:
+                    metadata = room_data["participant_metadata"]
+                    room_data["sip_from"] = metadata.get("sip_from") or metadata.get(
+                        "sipFrom") or metadata.get("from")
+                    room_data["sip_to"] = metadata.get(
+                        "sip_to") or metadata.get("sipTo") or metadata.get("to")
+                    room_data["sip_trunk_id"] = metadata.get("sip_trunk_id") or metadata.get(
+                        "sipTrunkId") or metadata.get("trunk_id")
+                    room_data["call_id"] = metadata.get(
+                        "call_id") or metadata.get("callId")
+                    room_data["direction"] = metadata.get(
+                        "direction") or metadata.get("call_direction")
+
+            # Try to extract from room attributes
+            room_attrs = dir(ctx.room)
+            for attr in room_attrs:
+                if attr.startswith('sip_') or attr in ['name', 'sid', 'metadata']:
+                    try:
+                        value = getattr(ctx.room, attr)
+                        # We already handled metadata
+                        if value and attr not in ['metadata']:
+                            room_data["additional_attributes"][attr] = str(
+                                value)
+                    except Exception as e:
+                        logger.debug(
+                            f"Could not access room attribute {attr}: {e}")
+
+        # Extract from job request if available
+        if hasattr(ctx, 'job') and hasattr(ctx.job, 'request'):
+            request = ctx.job.request
+            request_attrs = dir(request)
+            for attr in request_attrs:
+                if attr.startswith('sip_') or attr in ['room_name', 'call_id']:
+                    try:
+                        value = getattr(request, attr)
+                        if value:
+                            room_data["additional_attributes"][f"request_{attr}"] = str(
+                                value)
+                    except Exception as e:
+                        logger.debug(
+                            f"Could not access request attribute {attr}: {e}")
+
+        # Try to extract SIP data from room name patterns
+        if room_data["room_name"] and room_data["room_name"] != "unknown":
+            sip_data = extract_sip_data_from_room_name(room_data["room_name"])
+            if sip_data:
+                # Only update if we don't already have these values
+                for key, value in sip_data.items():
+                    if not room_data.get(key) and value:
+                        room_data[key] = value
+
+    except Exception as e:
+        logger.error(f"Error extracting comprehensive room data: {e}")
+
+    return room_data
+
+
+def extract_sip_data_from_room_name(room_name):
+    """
+    Extract SIP data from room name patterns
+
+    Args:
+        room_name: The room name string
+
+    Returns:
+        dict: Dictionary containing extracted SIP data
+    """
+    sip_data = {}
+
+    if not room_name:
+        return sip_data
+
+    try:
+        # Common SIP room name patterns
+        # Pattern 1: "sip-trunk123-from+1234567890-to+0987654321"
+        sip_pattern = r'sip-(?:trunk)?([^-]+)?-?from([^-]+)-to([^-]+)'
+        match = re.search(sip_pattern, room_name, re.IGNORECASE)
+        if match:
+            trunk_id, sip_from, sip_to = match.groups()
+            if trunk_id:
+                sip_data["sip_trunk_id"] = trunk_id
+            if sip_from:
+                sip_data["sip_from"] = sip_from.replace(
+                    '%2B', '+')  # URL decode +
+            if sip_to:
+                sip_data["sip_to"] = sip_to.replace('%2B', '+')
+
+        # Pattern 2: "twilio-trunk-abc123-+1234567890"
+        twilio_pattern = r'twilio-trunk-([^-]+)-(.+)'
+        match = re.search(twilio_pattern, room_name, re.IGNORECASE)
+        if match:
+            trunk_id, number = match.groups()
+            sip_data["sip_trunk_id"] = trunk_id
+            sip_data["sip_from"] = number if number.startswith(
+                '+') else f"+{number}"
+
+        # Pattern 3: Look for trunk IDs in various formats
+        trunk_patterns = [
+            r'trunk[_-]?([a-zA-Z0-9]+)',
+            r'trk[_-]?([a-zA-Z0-9]+)',
+            r'sip[_-]?trunk[_-]?([a-zA-Z0-9]+)'
+        ]
+
+        for pattern in trunk_patterns:
+            match = re.search(pattern, room_name, re.IGNORECASE)
+            if match and not sip_data.get("sip_trunk_id"):
+                sip_data["sip_trunk_id"] = match.group(1)
+                break
+
+    except Exception as e:
+        logger.debug(f"Error extracting SIP data from room name: {e}")
+
+    return sip_data
+
+
+def log_all_available_data(ctx):
+    """
+    Debug function to log all available data in the context
+
+    Args:
+        ctx: The JobContext object
+    """
+    logger.info("=== COMPREHENSIVE ROOM DATA DEBUG ===")
+
+    try:
+        # Log context attributes
+        ctx_attrs = [attr for attr in dir(ctx) if not attr.startswith('_')]
+        logger.info(f"Context attributes: {ctx_attrs}")
+
+        # Log job attributes
+        if hasattr(ctx, 'job'):
+            job_attrs = [attr for attr in dir(
+                ctx.job) if not attr.startswith('_')]
+            logger.info(f"Job attributes: {job_attrs}")
+
+            if hasattr(ctx.job, 'request'):
+                request_attrs = [attr for attr in dir(
+                    ctx.job.request) if not attr.startswith('_')]
+                logger.info(f"Job request attributes: {request_attrs}")
+
+        # Log room attributes
+        if hasattr(ctx, 'room') and ctx.room:
+            room_attrs = [attr for attr in dir(
+                ctx.room) if not attr.startswith('_')]
+            logger.info(f"Room attributes: {room_attrs}")
+
+            # Log participant attributes
+            if hasattr(ctx.room, 'local_participant') and ctx.room.local_participant:
+                participant_attrs = [attr for attr in dir(
+                    ctx.room.local_participant) if not attr.startswith('_')]
+                logger.info(
+                    f"Local participant attributes: {participant_attrs}")
+
+        # Extract and log comprehensive data
+        comprehensive_data = extract_comprehensive_room_data(ctx)
+        logger.info(f"Comprehensive room data: {comprehensive_data}")
+
+    except Exception as e:
+        logger.error(f"Error in debug logging: {e}")
+
+    logger.info("=== END ROOM DATA DEBUG ===")

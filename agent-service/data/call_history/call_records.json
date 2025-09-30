@@ -1,0 +1,173 @@
+[
+  {
+    "call_id": "84325e11-f4fd-4568-9261-1ecab485cd33",
+    "phone_number": "+15551234567",
+    "room_name": "livekit-+15551234567-e1a7aaad4692",
+    "call_type": "inbound",
+    "start_time": "2025-09-17T22:30:52.308399",
+    "end_time": "2025-09-17T22:30:54.322386",
+    "duration_seconds": 2.013987,
+    "status": "completed",
+    "termination_reason": null,
+    "agent_config": {
+      "stt_config_key": "DEEPGRAM_NOVA2_EN",
+      "llm_config_key": "OPENAI_GPT4O_MINI",
+      "tts_config_key": "ELEVENLABS_DEFAULT_EN",
+      "business_type": "test_business",
+      "language": "english"
+    },
+    "metrics": {
+      "total_user_utterances": 6,
+      "total_agent_utterances": 13,
+      "longest_user_utterance": 19,
+      "longest_agent_utterance": 46,
+      "average_user_response_time": 1.2295454552210257,
+      "average_agent_response_time": 1.5354132820297552,
+      "silence_count": 5,
+      "interruption_count": 2
+    },
+    "outcomes": {
+      "completion_rate": 0.8618935904646636,
+      "fields_collected": [
+        "name",
+        "industry",
+        "company_size"
+      ],
+      "final_stage": "closing",
+      "successful": true,
+      "notes": "Test call completed successfully"
+    },
+    "stage_timeline": [
+      {
+        "stage": "greeting",
+        "timestamp": "2025-09-17T22:30:52.810226"
+      },
+      {
+        "stage": "discovery",
+        "timestamp": "2025-09-17T22:30:53.313869"
+      },
+      {
+        "stage": "solution",
+        "timestamp": "2025-09-17T22:30:53.816041"
+      },
+      {
+        "stage": "closing",
+        "timestamp": "2025-09-17T22:30:54.318793"
+      }
+    ]
+  },
+  {
+    "call_id": "aa2b9a48-5872-4156-88c9-b4cdc7e1cf4c",
+    "phone_number": "+15559876543",
+    "room_name": "livekit-+15559876543-763e4116c5a9",
+    "call_type": "inbound",
+    "start_time": "2025-09-17T22:30:55.324681",
+    "end_time": "2025-09-17T22:30:57.342981",
+    "duration_seconds": 2.0183,
+    "status": "completed",
+    "termination_reason": null,
+    "agent_config": {
+      "stt_config_key": "DEEPGRAM_NOVA2_EN",
+      "llm_config_key": "OPENAI_GPT4O_MINI",
+      "tts_config_key": "ELEVENLABS_DEFAULT_EN",
+      "business_type": "test_business",
+      "language": "english"
+    },
+    "metrics": {
+      "total_user_utterances": 13,
+      "total_agent_utterances": 11,
+      "longest_user_utterance": 24,
+      "longest_agent_utterance": 49,
+      "average_user_response_time": 2.9396215692126306,
+      "average_agent_response_time": 0.7719266935942213,
+      "silence_count": 1,
+      "interruption_count": 0
+    },
+    "outcomes": {
+      "completion_rate": 0.9309554413129817,
+      "fields_collected": [
+        "name",
+        "industry",
+        "company_size"
+      ],
+      "final_stage": "closing",
+      "successful": true,
+      "notes": "Test call completed successfully"
+    },
+    "stage_timeline": [
+      {
+        "stage": "greeting",
+        "timestamp": "2025-09-17T22:30:55.829148"
+      },
+      {
+        "stage": "discovery",
+        "timestamp": "2025-09-17T22:30:56.331727"
+      },
+      {
+        "stage": "solution",
+        "timestamp": "2025-09-17T22:30:56.834879"
+      },
+      {
+        "stage": "closing",
+        "timestamp": "2025-09-17T22:30:57.339352"
+      }
+    ]
+  },
+  {
+    "call_id": "32ceb8b2-c3c5-4701-9ccd-f946faaa5f44",
+    "phone_number": "+15552223333",
+    "room_name": "livekit-+15552223333-e26325f2bc5a",
+    "call_type": "inbound",
+    "start_time": "2025-09-17T22:30:58.345360",
+    "end_time": "2025-09-17T22:31:00.367876",
+    "duration_seconds": 2.022516,
+    "status": "completed",
+    "termination_reason": null,
+    "agent_config": {
+      "stt_config_key": "DEEPGRAM_NOVA2_EN",
+      "llm_config_key": "OPENAI_GPT4O_MINI",
+      "tts_config_key": "ELEVENLABS_DEFAULT_EN",
+      "business_type": "test_business",
+      "language": "english"
+    },
+    "metrics": {
+      "total_user_utterances": 9,
+      "total_agent_utterances": 6,
+      "longest_user_utterance": 46,
+      "longest_agent_utterance": 40,
+      "average_user_response_time": 3.3396642026081675,
+      "average_agent_response_time": 0.5067527091878954,
+      "silence_count": 5,
+      "interruption_count": 2
+    },
+    "outcomes": {
+      "completion_rate": 0.7377375510607962,
+      "fields_collected": [
+        "name",
+        "industry",
+        "company_size"
+      ],
+      "final_stage": "closing",
+      "successful": true,
+      "notes": "Test call completed successfully"
+    },
+    "stage_timeline": [
+      {
+        "stage": "greeting",
+        "timestamp": "2025-09-17T22:30:58.850764"
+      },
+      {
+        "stage": "discovery",
+        "timestamp": "2025-09-17T22:30:59.355506"
+      },
+      {
+        "stage": "solution",
+        "timestamp": "2025-09-17T22:30:59.859564"
+      },
+      {
+        "stage": "closing",
+        "timestamp": "2025-09-17T22:31:00.363505"
+      }
+    ]
+  }
+]

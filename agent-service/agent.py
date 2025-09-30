@@ -1,6 +1,5 @@
 from dotenv import load_dotenv
 import json
-import os
 import logging
 import asyncio
 import signal
@@ -14,7 +13,7 @@ from livekit.plugins import (
 from livekit.plugins.turn_detector.multilingual import MultilingualModel
 from utils.config_fetcher import get_agent_config_from_room
 from utils.model_factory import ModelFactory
-from utils.room_extractor import extract_room_name, extract_phone_number
+from utils.room_extractor import extract_room_name, extract_phone_number, extract_comprehensive_room_data, log_all_available_data
 from utils.call_history import (
     start_call_recording,
     update_call_config,
@@ -45,11 +44,20 @@ class Assistant(Agent):
 async def entrypoint(ctx: agents.JobContext):
     await ctx.connect()
 
+    # Extract comprehensive room data including SIP information
+    room_data = extract_comprehensive_room_data(ctx)
+    logger.info(f"Comprehensive room data: {room_data}")
+
+    all_data = log_all_available_data(ctx)
+    logger.info(f"All available data: {all_data}")
+
     # Extract room name using our utility function
-    room_name = extract_room_name(ctx)
+    room_name = room_data.get("room_name", "unknown")
+    if room_name == "unknown":
+        room_name = extract_room_name(ctx)
     logger.info(f"Processing job request for room: {room_name}")
 
-    # Extract phone number from room name
+    # Extract phone number from room data or room name
     phone_number = extract_phone_number(room_name)
     if phone_number:
         logger.info(f"Extracted phone number: {phone_number}")
@@ -58,7 +66,18 @@ async def entrypoint(ctx: agents.JobContext):
             f"Could not extract phone number from room name: {room_name}")
         phone_number = "unknown"
 
-    # Start call recording
+    # Log SIP data if available
+    if room_data.get("sip_from"):
+        logger.info(f"SIP From: {room_data['sip_from']}")
+    if room_data.get("sip_to"):
+        logger.info(f"SIP To: {room_data['sip_to']}")
+    if room_data.get("sip_trunk_id"):
+        logger.info(f"SIP Trunk ID: {room_data['sip_trunk_id']}")
+    if room_data.get("call_id"):
+        logger.info(f"Call ID: {room_data['call_id']}")
+    if room_data.get("direction"):
+        # Start call recording
+        logger.info(f"Call Direction: {room_data['direction']}")
     call_id = await start_call_recording(
         phone_number=phone_number,
         room_name=room_name,
@@ -144,9 +163,6 @@ async def entrypoint(ctx: agents.JobContext):
         await session.generate_reply(
             instructions=f"Greet the user with: {welcome_message}"
         )
-
-        # Wait for session to complete
-        await session.wait_until_done()
 
         # Record successful call completion
         await end_call_recording(
