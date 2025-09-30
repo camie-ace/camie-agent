@@ -1,0 +1,2 @@
+call_id,phone_number,room_name,call_type,start_time,end_time,duration_seconds,status,termination_reason,business_type,language,stt_config_key,llm_config_key,tts_config_key,total_user_utterances,total_agent_utterances,final_stage,completion_rate,successful
+84325e11-f4fd-4568-9261-1ecab485cd33,+15551234567,livekit-+15551234567-e1a7aaad4692,inbound,2025-09-17T22:30:52.308399,2025-09-17T22:30:54.322386,2.013987,completed,,test_business,english,DEEPGRAM_NOVA2_EN,OPENAI_GPT4O_MINI,ELEVENLABS_DEFAULT_EN,6,13,closing,0.8618935904646636,True
