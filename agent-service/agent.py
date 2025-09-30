@@ -48,8 +48,8 @@ async def entrypoint(ctx: agents.JobContext):
     room_data = extract_comprehensive_room_data(ctx)
     logger.info(f"Comprehensive room data: {room_data}")
 
-    all_data = log_all_available_data(ctx)
-    logger.info(f"All available data: {all_data}")
+    # Debug: Log all available data (this function just logs, doesn't return)
+    log_all_available_data(ctx)
 
     # Extract room name using our utility function
     room_name = room_data.get("room_name", "unknown")
