@@ -5,7 +5,23 @@ SIP data from LiveKit room contexts and metadata.
 Key functions:
 - extract_room_name(): Basic room name extraction
 - extract_phone_number(): Phone number extraction from room name
-- extract_comprehensive_room_data(): Complete SIP and room data extraction
+- extract_comp        # Pattern 2: "twilio-trunk-abc123-+1234567890" or "twilio-_3693_naxnFCNHxkDu"
+        twilio_patterns = [
+            r'twilio-trunk-([^-]+)-(.+)',  # Standard twilio-trunk-id-number
+            r'twilio-_([^_]+)_(.+)',       # twilio-_id_identifier (like twilio-_3693_naxnFCNHxkDu)
+            r'twilio-([^-_]+)-(.+)',       # twilio-id-identifier (generic dash separator)
+            r'twilio-([^-_]+)_(.+)'        # twilio-id_identifier (generic underscore separator)
+        ]
+        
+        for pattern in twilio_patterns:
+            match = re.search(pattern, room_name, re.IGNORECASE)
+            if match:
+                trunk_id, identifier = match.groups()
+                sip_data["sip_trunk_id"] = trunk_id
+                # For Twilio patterns, the identifier might be the call ID or session ID
+                sip_data["call_id"] = identifier
+                logger.debug(f"Extracted Twilio SIP data: trunk_id={trunk_id}, call_id={identifier}")
+                breakve_room_data(): Complete SIP and room data extraction
 - log_all_available_data(): Debug function for exploring available data
 """
 
@@ -197,10 +213,10 @@ def extract_comprehensive_room_data(ctx):
                     room_data["direction"] = metadata.get(
                         "direction") or metadata.get("call_direction")
 
-            # Try to extract from room attributes
+            # Try to extract from room attributes (avoiding coroutines)
             room_attrs = dir(ctx.room)
             for attr in room_attrs:
-                if attr.startswith('sip_') or attr in ['name', 'sid', 'metadata']:
+                if attr.startswith('sip_') or attr in ['name', 'metadata']:
                     try:
                         value = getattr(ctx.room, attr)
                         # We already handled metadata
@@ -210,6 +226,13 @@ def extract_comprehensive_room_data(ctx):
                     except Exception as e:
                         logger.debug(
                             f"Could not access room attribute {attr}: {e}")
+
+            # Handle sid separately since it's a coroutine
+            try:
+                # Don't try to access sid directly as it's async
+                logger.debug("Skipping room.sid as it's a coroutine")
+            except Exception as e:
+                logger.debug(f"Error with room.sid: {e}")
 
         # Extract from job request if available
         if hasattr(ctx, 'job') and hasattr(ctx.job, 'request'):
@@ -228,12 +251,30 @@ def extract_comprehensive_room_data(ctx):
 
         # Try to extract SIP data from room name patterns
         if room_data["room_name"] and room_data["room_name"] != "unknown":
+            logger.debug(
+                f"Attempting to extract SIP data from room name: {room_data['room_name']}")
             sip_data = extract_sip_data_from_room_name(room_data["room_name"])
             if sip_data:
+                logger.debug(f"Extracted SIP data from room name: {sip_data}")
                 # Only update if we don't already have these values
                 for key, value in sip_data.items():
                     if not room_data.get(key) and value:
                         room_data[key] = value
+                        logger.debug(
+                            f"Set {key} = {value} from room name pattern")
+            else:
+                logger.debug("No SIP data found in room name patterns")
+
+        # Fallback: Use environment variables if available
+        if not room_data.get("sip_to") or not room_data.get("sip_from"):
+            import os
+            env_phone = os.getenv("PHONE_NUMBER")
+            if env_phone:
+                logger.debug(
+                    f"Using environment PHONE_NUMBER as fallback: {env_phone}")
+                # For inbound calls, this would typically be sip_to
+                if not room_data.get("sip_to"):
+                    room_data["sip_to"] = env_phone
 
     except Exception as e:
         logger.error(f"Error extracting comprehensive room data: {e}")
