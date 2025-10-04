@@ -198,8 +198,9 @@ class ModelFactory:
             else:
                 return elevenlabs.TTS(model=model, language=language, voice_id=voice_id)
         elif provider == "cartesia":
-            model = config.get("model", "cartesia-tts-1")
-            voice = config.get("voice", "female-01")
+            model = config.get("model", TTSConfig.CARTESIA_DEFAULT_FR.value["model"])
+            voice = config.get(
+                "voice", TTSConfig.CARTESIA_DEFAULT_FR.value["voice"])
 
             # Build kwargs dictionary with only defined optional parameters
             kwargs = {}

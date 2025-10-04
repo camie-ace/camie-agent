@@ -71,6 +71,6 @@ jobs:
           --set-string secrets.dotenv.LIVEKIT_API_KEY='${{ secrets.DOTENV_LIVEKIT_API_KEY }}' \
           --set-string secrets.dotenv.LIVEKIT_API_SECRET='${{ secrets.DOTENV_LIVEKIT_API_SECRET }}' \
           --set-string secrets.dotenv.JWT_SECRET='${{ secrets.JWT_SECRET }}' \
-          --set-string secrets.dotenv.VOICE_CONFIG_TOKEN_URL='${{ secrets.VOICE_CONFIG_TOKEN_URL }}' \
-          --set-string secrets.CALL_HISTORY_ENDPOINT='${{ secrets.CALL_HISTORY_ENDPOINT }}' \
+          --set-string secrets.dotenv.VOICE_CONFIG_TOKEN_URL='${{ secrets.DOTENV_VOICE_CONFIG_TOKEN_URL }}' \
+          --set-string secrets.dotenv.CALL_HISTORY_ENDPOINT='${{ secrets.DOTENV_CALL_HISTORY_ENDPOINT }}' \
             --wait
