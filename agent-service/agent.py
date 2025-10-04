@@ -4,7 +4,7 @@ import logging
 import asyncio
 import signal
 
-from livekit import agents
+from livekit import agents, rtc
 from livekit.agents import AgentSession, Agent, RoomInputOptions, JobProcess
 from livekit.plugins import (
     noise_cancellation,
@@ -43,6 +43,26 @@ class Assistant(Agent):
 
 async def entrypoint(ctx: agents.JobContext):
     await ctx.connect()
+
+    @ctx.room.on("participant_connected")
+    def on_participant_connected(participant: rtc.RemoteParticipant):
+        if participant.kind == rtc.ParticipantKind.PARTICIPANT_KIND_SIP:
+            # The phone number is typically in the participant's name or identity
+            phone_number = participant.name  # or participant.identity
+
+            print(f"Call started from phone number: {phone_number}")
+
+            # You can also access attributes for more details
+            print(f"Participant attributes: {participant.attributes}")
+
+            # Check for specific SIP attributes
+            if "sip_from" in participant.attributes:
+                caller_number = participant.attributes["sip_from"]
+                print(f"Caller number (from SIP): {caller_number}")
+
+            if "sip_to" in participant.attributes:
+                dialed_number = participant.attributes["sip_to"]
+                print(f"Dialed number: {dialed_number}")
 
     # Extract room name using our utility function
     room_name = extract_room_name(ctx)
