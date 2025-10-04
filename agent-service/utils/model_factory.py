@@ -25,6 +25,7 @@ from livekit.plugins import (
     cartesia,
 )
 from livekit.plugins.elevenlabs import VoiceSettings
+from config.config_definitions import TTSConfig
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -143,7 +144,7 @@ class ModelFactory:
                 - stability: Voice stability setting (optional, float)
                 - style: Voice style setting (optional, float)
                 - speed: Speech speed setting (optional, float)
-                
+
                 Note: Voice settings are properly converted to a VoiceSettings instance
 
                 For Cartesia:
@@ -159,8 +160,8 @@ class ModelFactory:
 
         if not provider:
             logger.warning(
-                "No TTS provider specified, defaulting to elevenlabs")
-            provider = "elevenlabs"
+                "No TTS provider specified, defaulting to cartesia")
+            provider = "cartesia"
 
         if provider == "elevenlabs":
             model = config.get("model", "eleven_turbo_v2_5")
@@ -172,7 +173,7 @@ class ModelFactory:
             similarity_boost = config.get("similarity_boost")
             style = config.get("style")
             speed = config.get("speed")
-            
+
             # Create VoiceSettings instance with only defined parameters
             voice_settings_kwargs = {}
             if stability is not None:
@@ -183,13 +184,14 @@ class ModelFactory:
                 voice_settings_kwargs["style"] = style
             if speed is not None:
                 voice_settings_kwargs["speed"] = speed
-                
+
             # Create VoiceSettings instance if any settings are specified
-            voice_settings = VoiceSettings(**voice_settings_kwargs) if voice_settings_kwargs else None
-            
+            voice_settings = VoiceSettings(
+                **voice_settings_kwargs) if voice_settings_kwargs else None
+
             logger.info(
                 f"Creating ElevenLabs TTS with model={model}, voice_id={voice_id}, language={language}, voice_settings={voice_settings_kwargs}")
-            
+
             # Pass voice_settings as an instance or None
             if voice_settings:
                 return elevenlabs.TTS(model=model, language=language, voice_id=voice_id, voice_settings=voice_settings)
@@ -210,9 +212,9 @@ class ModelFactory:
             return cartesia.TTS(model=model, voice=voice, **kwargs)
         else:
             logger.warning(
-                f"Unsupported TTS provider: {provider}, defaulting to elevenlabs")
+                f"Unsupported TTS provider: {provider}, defaulting to cartesia")
             # Use default model and voice_id without any voice settings
-            return elevenlabs.TTS(model="eleven_monolingual_v1", voice_id="EXAVITQu4vr4xnSDxMaL")
+            return cartesia.TTS(model=TTSConfig.CARTESIA_DEFAULT_FR.value["model"], language=TTSConfig.CARTESIA_DEFAULT_FR.value["language"], voice=TTSConfig.CARTESIA_DEFAULT_FR.value["voice"])
 
 
 def create_model_components(config: Dict[str, Any]):
