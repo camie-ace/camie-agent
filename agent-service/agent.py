@@ -5,7 +5,7 @@ import asyncio
 import signal
 
 from livekit import agents
-from livekit.agents import AgentSession, Agent, RoomInputOptions
+from livekit.agents import AgentSession, Agent, RoomInputOptions, JobProcess
 from livekit.plugins import (
     noise_cancellation,
     silero,
@@ -47,6 +47,7 @@ async def entrypoint(ctx: agents.JobContext):
     # Extract room name using our utility function
     room_name = extract_room_name(ctx)
     logger.info(f"Processing job request for room: {room_name}")
+    logger.info(f"Full job context: {JobProcess}")
  
     # Extract phone number from room name
     phone_number = extract_phone_number(room_name)
