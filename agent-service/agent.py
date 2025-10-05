@@ -47,30 +47,47 @@ async def entrypoint(ctx: agents.JobContext):
     @ctx.room.on("participant_connected")
     def on_participant_connected(participant: rtc.RemoteParticipant):
         if participant.kind == rtc.ParticipantKind.PARTICIPANT_KIND_SIP:
-            # The phone number is typically in the participant's name or identity
+            # Extract basic participant info
             phone_number = participant.identity
             logger.info(f"Participant connected: {participant}")
             logger.info(f"Participant identity (phone number): {phone_number}")
 
-            print(f"Call started from phone number: {phone_number}")
+            # Log all SIP-related attributes
+            sip_details = {
+                'identity': phone_number,
+                'name': participant.name,
+                'metadata': participant.metadata
+            }
 
-            # You can also access attributes for more details
-            print(f"Participant attributes: {participant.attributes}")
+            # Extract all SIP-specific attributes
+            sip_attributes = {
+                key: value for key, value in participant.attributes.items()
+                if key.startswith('sip_')
+            }
+            sip_details.update(sip_attributes)
 
-            # Check for specific SIP attributes
-            if "sip_from" in participant.attributes:
-                caller_number = participant.attributes["sip_from"]
-                print(f"Caller number (from SIP): {caller_number}")
+            # Log comprehensive SIP details
+            logger.info("SIP Call Details:")
+            for key, value in sip_details.items():
+                logger.info(f"  {key}: {value}")
 
-            if "sip_to" in participant.attributes:
-                dialed_number = participant.attributes["sip_to"]
-                print(f"Dialed number: {dialed_number}")
+            # Extract commonly used SIP fields
+            caller_number = participant.attributes.get('sip_from', 'unknown')
+            dialed_number = participant.attributes.get('sip_to', 'unknown')
+            call_id = participant.attributes.get('sip_call_id', 'unknown')
+            request_uri = participant.attributes.get(
+                'sip_request_uri', 'unknown')
+
+            logger.info(f"Caller Number: {caller_number}")
+            logger.info(f"Dialed Number: {dialed_number}")
+            logger.info(f"Call ID: {call_id}")
+            logger.info(f"Request URI: {request_uri}")
 
     # Extract room name using our utility function
     room_name = extract_room_name(ctx)
     logger.info(f"Processing job request for room: {room_name}")
     logger.info(f"Full job context: {JobProcess}")
- 
+
     # Extract phone number from room name
     phone_number = extract_phone_number(room_name)
     if phone_number:
@@ -168,7 +185,6 @@ async def entrypoint(ctx: agents.JobContext):
         await session.generate_reply(
             instructions=f"Greet the user with: {welcome_message}"
         )
-
 
         # Record successful call completion
         await end_call_recording(
