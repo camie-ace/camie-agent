@@ -44,14 +44,13 @@ class Assistant(Agent):
 async def entrypoint(ctx: agents.JobContext):
     await ctx.connect()
 
-    data = json.loads(ctx.job.metadata)
-
-    logger.info(f"Job metadata: {data}")
     @ctx.room.on("participant_connected")
     def on_participant_connected(participant: rtc.RemoteParticipant):
         if participant.kind == rtc.ParticipantKind.PARTICIPANT_KIND_SIP:
             # The phone number is typically in the participant's name or identity
-            phone_number = participant.name  # or participant.identity
+            phone_number = participant.identity
+            logger.info(f"Participant connected: {participant}")
+            logger.info(f"Participant identity (phone number): {phone_number}")
 
             print(f"Call started from phone number: {phone_number}")
 
