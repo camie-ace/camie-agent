@@ -44,6 +44,9 @@ class Assistant(Agent):
 async def entrypoint(ctx: agents.JobContext):
     await ctx.connect()
 
+    data = json.loads(ctx.job.metadata)
+
+    logger.info(f"Job metadata: {data}")
     @ctx.room.on("participant_connected")
     def on_participant_connected(participant: rtc.RemoteParticipant):
         if participant.kind == rtc.ParticipantKind.PARTICIPANT_KIND_SIP:
