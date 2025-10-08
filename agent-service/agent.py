@@ -83,25 +83,55 @@ async def entrypoint(ctx: agents.JobContext):
             logger.info(f"Call ID: {call_id}")
             logger.info(f"Request URI: {request_uri}")
 
+    # Initialize variables that will be set when participant connects
+    participant_metadata = None
+    call_type = "inbound"  # Default value
+    phone_number = "unknown"
+
+    # Create a Future to track when we receive participant details
+    participant_details_received = asyncio.Future()
+
+    @ctx.room.on("participant_connected")
+    def on_participant_connected(participant: rtc.RemoteParticipant):
+        if participant.kind == rtc.ParticipantKind.PARTICIPANT_KIND_SIP:
+            nonlocal participant_metadata, call_type, phone_number
+
+            # Extract basic participant info
+            phone_number = extract_phone_number(room_name)
+            logger.info(f"Participant connected: {participant}")
+            logger.info(f"Participant identity (phone number): {phone_number}")
+
+            try:
+                # Parse the metadata which contains call direction
+                metadata = json.loads(
+                    participant.metadata) if participant.metadata else {}
+                call_type = metadata.get('call_type', 'inbound')
+                participant_metadata = metadata
+                logger.info(f"Call type from metadata: {call_type}")
+            except json.JSONDecodeError:
+                logger.error(
+                    f"Failed to parse participant metadata: {participant.metadata}")
+
+            # Signal that we have received participant details
+            if not participant_details_received.done():
+                participant_details_received.set_result(True)
+
     # Extract room name using our utility function
     room_name = extract_room_name(ctx)
     logger.info(f"Processing job request for room: {room_name}")
     logger.info(f"Full job context: {JobProcess}")
 
-    # Extract phone number from room name
-    phone_number = extract_phone_number(room_name)
-    if phone_number:
-        logger.info(f"Extracted phone number: {phone_number}")
-    else:
-        logger.warning(
-            f"Could not extract phone number from room name: {room_name}")
-        phone_number = "unknown"
+    # Wait for participant details (with a timeout)
+    try:
+        await asyncio.wait_for(participant_details_received, timeout=10.0)
+    except asyncio.TimeoutError:
+        logger.warning("Timeout waiting for participant details")
 
-    # Start call recording
+    # Start call recording with the detected call type
     call_id = await start_call_recording(
         phone_number=phone_number,
         room_name=room_name,
-        call_type="inbound"  # Default to inbound, could be determined from context
+        call_type=call_type
     )
     logger.info(f"Started call recording with ID: {call_id}")
 
@@ -114,27 +144,6 @@ async def entrypoint(ctx: agents.JobContext):
 
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, lambda s=sig: handle_signal(s, None))
-
-    # Get participant metadata if available
-    participant_metadata = None
-    logger.info(f"Job Context: {ctx}")
-    logger.info(f"Job: {ctx.job}")
-    logger.info(f"Room: {ctx.room}")
-    if ctx.room:
-        logger.info(f"Local participant: {ctx.room.local_participant}")
-        if ctx.room.local_participant:
-            logger.info(
-                f"Metadata type: {type(ctx.room.local_participant.metadata)}")
-            logger.info(
-                f"Metadata value: {ctx.room.local_participant.metadata}")
-    if ctx.room and ctx.room.local_participant and ctx.room.local_participant.metadata:
-        try:
-            metadata_str = ctx.room.local_participant.metadata
-            participant_metadata = json.loads(metadata_str)
-            logger.info(f"Participant metadata: {participant_metadata}")
-        except json.JSONDecodeError:
-            logger.error(
-                f"Failed to parse participant metadata: {ctx.room.local_participant.metadata}")
 
     try:
         # Fetch agent configuration using room name and metadata
