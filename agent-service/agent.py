@@ -221,5 +221,4 @@ async def end_call_with_reason(call_id: str, reason: str):
 
 
 if __name__ == "__main__":
-    agents.cli.run_app(agents.WorkerOptions(
-        entrypoint_fnc=entrypoint, agent_name="airAgent-v2"))
+    agents.cli.run_app(agents.WorkerOptions(entrypoint_fnc=entrypoint))
