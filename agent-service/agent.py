@@ -119,7 +119,6 @@ async def entrypoint(ctx: agents.JobContext):
     # Extract room name using our utility function
     room_name = extract_room_name(ctx)
     logger.info(f"Processing job request for room: {room_name}")
-    logger.info(f"Full job context: {JobProcess}")
 
     # Wait for participant details (with a timeout)
     try:
@@ -156,14 +155,51 @@ async def entrypoint(ctx: agents.JobContext):
         logger.info(
             f"Using agent configuration: {json.dumps(agent_config, indent=2)}")
 
-        # Extract config sections
-        stt_config = agent_config.get("stt", {})
-        llm_config = agent_config.get("llm", {})
-        tts_config = agent_config.get("tts", {})
+        # Extract basic configuration values
         assistant_instructions = agent_config.get(
-            "assistant_instructions", "You are a helpful voice AI assistant.")
+            "assistant_instruction", "You are a helpful voice AI assistant.")
         welcome_message = agent_config.get(
-            "welcome_message", "Hello! How can I assist you today?")
+            "static_message", "Hello! How can I help you today?")
+        welcome_type = agent_config.get("welcome_message_type", "user_initiates")
+
+        # Prepare STT (Speech-to-Text) configuration
+        stt_config = {
+            "provider": agent_config.get("transcription_provider", "deepgram"),
+            "language": agent_config.get("agent_language", "en-US")
+        }
+        logger.info(f"Using STT provider: {stt_config['provider']}")
+
+        # Prepare TTS (Text-to-Speech) configuration
+        tts_config = {
+            "provider": agent_config.get("voice_provider", None),
+            "voice": agent_config.get("voice", None),
+            "custom_voice_id": agent_config.get("custom_voice_id"),
+            "speed": agent_config.get("voice_speed", 1),
+            "stability": agent_config.get("stability", 75),
+            "clarity_similarity": agent_config.get("clarity_similarity", 80),
+            "voice_improvement": agent_config.get("voice_improvement", True),
+            "language": agent_config.get("agent_language", None)
+        }
+        logger.info(
+            f"Using TTS provider: {tts_config['provider']} with voice: {tts_config['voice']}")
+
+        # Prepare LLM configuration with call control parameters
+        llm_config = {
+            "end_call_on_silence": agent_config.get("end_call_on_silence", False),
+            "silence_duration": agent_config.get("silence_duration", 60),
+            "max_call_duration": agent_config.get("max_call_duration", 1800),
+            "tools": agent_config.get("tools", {
+                "email": False,
+                "calendar": False,
+                "knowledge_base": False
+            })
+        }
+
+        # Log the final configurations
+        logger.info("Final configuration:")
+        logger.info(f"STT Config: {json.dumps(stt_config, indent=2)}")
+        logger.info(f"TTS Config: {json.dumps(tts_config, indent=2)}")
+        logger.info(f"LLM Config: {json.dumps(llm_config, indent=2)}")
 
         # Dynamically create model components based on configuration
         stt = ModelFactory.create_stt(stt_config)
@@ -220,7 +256,7 @@ async def entrypoint(ctx: agents.JobContext):
         raise
 
 
-async def end_call_with_reason(call_id: str, reason: str):
+async def end_call_with_reason(self, call_id: str, reason: str):
     """Helper function to end a call with a specific reason"""
     await end_call_recording(
         call_id=call_id,
