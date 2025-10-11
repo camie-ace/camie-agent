@@ -100,7 +100,10 @@ class Assistant(AbstractAgent):
         logger.info(f"Processing job request for room: {self._room_name}")
 
         # Set up participant connection handler
-        ctx.room.on("participant_connected")(self.handle_participant_connected)
+        def on_participant_connected(participant: rtc.RemoteParticipant):
+            asyncio.create_task(self.handle_participant_connected(participant))
+        
+        ctx.room.on("participant_connected")(on_participant_connected)
 
     async def handle_participant_connected(self, participant: rtc.RemoteParticipant) -> None:
         """Handle participant connection events"""
