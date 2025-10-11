@@ -108,6 +108,7 @@ class Assistant(AbstractAgent):
     async def handle_participant_connected(self, participant: rtc.RemoteParticipant) -> None:
         """Handle participant connection events"""
         if participant.kind != rtc.ParticipantKind.PARTICIPANT_KIND_SIP:
+            logger.info(f"Participant connected: {participant}")
             return
 
         phone_number = extract_phone_number(self._room_name)
