@@ -1,3 +1,6 @@
+from dataclasses import dataclass
+from typing import Dict, Any, Optional
+from abc import ABC, abstractmethod
 from dotenv import load_dotenv
 import json
 import logging
@@ -27,190 +30,180 @@ logger = logging.getLogger(__name__)
 load_dotenv()
 
 
-class Assistant(Agent):
+@dataclass
+class AgentConfig:
+    """Data class to hold agent configuration"""
+    stt_config: Dict[str, Any]
+    tts_config: Dict[str, Any]
+    llm_config: Dict[str, Any]
+    instructions: str
+    welcome_message: str
+    welcome_type: str
+
+
+class AbstractAgent(Agent, ABC):
+    """Abstract base class for all agents"""
+
+    @abstractmethod
+    async def initialize(self, ctx: agents.JobContext) -> None:
+        """Initialize the agent with context"""
+        pass
+
+    @abstractmethod
+    async def handle_participant_connected(self, participant: rtc.RemoteParticipant) -> None:
+        """Handle participant connection"""
+        pass
+
+    @abstractmethod
+    async def start_session(self) -> None:
+        """Start the agent session"""
+        pass
+
+    @abstractmethod
+    async def end_session(self, reason: str = None) -> None:
+        """End the agent session"""
+        pass
+
+
+class Assistant(AbstractAgent):
     def __init__(self, instructions: str = "You are a helpful voice AI assistant.", call_id: str = None) -> None:
         super().__init__(instructions=instructions)
-        self.call_id = call_id
-        self.current_stage = "greeting"
+        self._call_id = call_id
+        self._current_stage = "greeting"
+        self._session: Optional[AgentSession] = None
+        self._config: Optional[AgentConfig] = None
+        self._room_name: Optional[str] = None
+        self._participant_metadata: Optional[Dict] = None
+        self._noise_cancellation = noise_cancellation.BVC()
+
+    @property
+    def current_stage(self) -> str:
+        """Get the current stage of the conversation"""
+        return self._current_stage
+
+    @property
+    def call_id(self) -> Optional[str]:
+        """Get the call ID"""
+        return self._call_id
 
     async def on_stage_update(self, stage: str) -> None:
         """Handle stage updates and record them in call history"""
-        self.current_stage = stage
-        if self.call_id:
-            await update_call_stage(self.call_id, stage)
-            logger.info(f"Call {self.call_id}: Stage updated to {stage}")
+        self._current_stage = stage
+        if self._call_id:
+            await update_call_stage(self._call_id, stage)
+            logger.info(f"Call {self._call_id}: Stage updated to {stage}")
 
+    async def initialize(self, ctx: agents.JobContext) -> None:
+        """Initialize the agent with context"""
+        await ctx.connect()
+        self._room_name = extract_room_name(ctx)
+        logger.info(f"Processing job request for room: {self._room_name}")
 
-async def entrypoint(ctx: agents.JobContext):
-    await ctx.connect()
+        # Set up participant connection handler
+        ctx.room.on("participant_connected")(self.handle_participant_connected)
 
-    @ctx.room.on("participant_connected")
-    def on_participant_connected(participant: rtc.RemoteParticipant):
-        if participant.kind == rtc.ParticipantKind.PARTICIPANT_KIND_SIP:
-            # Extract basic participant info
-            phone_number = participant.identity
-            logger.info(f"Participant connected: {participant}")
-            logger.info(f"Participant identity (phone number): {phone_number}")
+    async def handle_participant_connected(self, participant: rtc.RemoteParticipant) -> None:
+        """Handle participant connection events"""
+        if participant.kind != rtc.ParticipantKind.PARTICIPANT_KIND_SIP:
+            return
 
-            # Log all SIP-related attributes
-            sip_details = {
-                'identity': phone_number,
-                'name': participant.name,
-                'metadata': participant.metadata
-            }
+        phone_number = extract_phone_number(self._room_name)
+        logger.info(f"Participant connected: {participant}")
+        logger.info(f"Participant identity (phone number): {phone_number}")
 
-            # Extract all SIP-specific attributes
-            sip_attributes = {
-                key: value for key, value in participant.attributes.items()
-                if key.startswith('sip_')
-            }
-            sip_details.update(sip_attributes)
+        try:
+            metadata = json.loads(
+                participant.metadata) if participant.metadata else {}
+            call_type = metadata.get('call_type', 'inbound')
+            self._participant_metadata = metadata
+            self._noise_cancellation = noise_cancellation.BVCTelephony()
+            logger.info(f"Call type from metadata: {call_type}")
 
-            # Log comprehensive SIP details
-            logger.info("SIP Call Details:")
-            for key, value in sip_details.items():
-                logger.info(f"  {key}: {value}")
+            # Start call recording
+            self._call_id = await self._start_call_recording(phone_number, call_type)
 
-            # Extract commonly used SIP fields
-            caller_number = participant.attributes.get('sip_from', 'unknown')
-            dialed_number = participant.attributes.get('sip_to', 'unknown')
-            call_id = participant.attributes.get('sip_call_id', 'unknown')
-            request_uri = participant.attributes.get(
-                'sip_request_uri', 'unknown')
+        except json.JSONDecodeError:
+            logger.error(
+                f"Failed to parse participant metadata: {participant.metadata}")
 
-            logger.info(f"Caller Number: {caller_number}")
-            logger.info(f"Dialed Number: {dialed_number}")
-            logger.info(f"Call ID: {call_id}")
-            logger.info(f"Request URI: {request_uri}")
+    async def _start_call_recording(self, phone_number: str, call_type: str) -> str:
+        """Start call recording and return call_id"""
+        call_id = await start_call_recording(
+            phone_number=phone_number,
+            room_name=self._room_name,
+            call_type=call_type
+        )
+        logger.info(f"Started call recording with ID: {call_id}")
+        return call_id
 
-    # Initialize variables that will be set when participant connects
-    participant_metadata = None
-    call_type = "inbound"  # Default value
-    phone_number = "unknown"
-
-    # Create a Future to track when we receive participant details
-    participant_details_received = asyncio.Future()
-
-    @ctx.room.on("participant_connected")
-    def on_participant_connected(participant: rtc.RemoteParticipant):
-        if participant.kind == rtc.ParticipantKind.PARTICIPANT_KIND_SIP:
-            nonlocal participant_metadata, call_type, phone_number
-
-            # Extract basic participant info
-            phone_number = extract_phone_number(room_name)
-            logger.info(f"Participant connected: {participant}")
-            logger.info(f"Participant identity (phone number): {phone_number}")
-
-            try:
-                # Parse the metadata which contains call direction
-                metadata = json.loads(
-                    participant.metadata) if participant.metadata else {}
-                call_type = metadata.get('call_type', 'inbound')
-                participant_metadata = metadata
-                logger.info(f"Call type from metadata: {call_type}")
-            except json.JSONDecodeError:
-                logger.error(
-                    f"Failed to parse participant metadata: {participant.metadata}")
-
-            # Signal that we have received participant details
-            if not participant_details_received.done():
-                participant_details_received.set_result(True)
-
-    # Extract room name using our utility function
-    room_name = extract_room_name(ctx)
-    logger.info(f"Processing job request for room: {room_name}")
-
-    # Wait for participant details (with a timeout)
-    try:
-        await asyncio.wait_for(participant_details_received, timeout=10.0)
-    except asyncio.TimeoutError:
-        logger.warning("Timeout waiting for participant details")
-
-    # Start call recording with the detected call type
-    call_id = await start_call_recording(
-        phone_number=phone_number,
-        room_name=room_name,
-        call_type=call_type
-    )
-    logger.info(f"Started call recording with ID: {call_id}")
-
-    # Set up signal handlers for graceful shutdown
-    loop = asyncio.get_event_loop()
-
-    def handle_signal(sig, frame):
-        logger.info(f"Received signal {sig}, ending call recording")
-        asyncio.create_task(end_call_with_reason(call_id, "system_interrupt"))
-
-    for sig in (signal.SIGINT, signal.SIGTERM):
-        loop.add_signal_handler(sig, lambda s=sig: handle_signal(s, None))
-
-    try:
-        # Fetch agent configuration using room name and metadata
-        agent_config = await get_agent_config_from_room(room_name, participant_metadata)
-
-        # Update call record with agent configuration
-        await update_call_config(call_id, agent_config)
-
-        # Log the configuration
+    async def _load_config(self) -> None:
+        """Load and process agent configuration"""
+        agent_config = await get_agent_config_from_room(self._room_name, self._participant_metadata)
+        await update_call_config(self._call_id, agent_config)
         logger.info(
             f"Using agent configuration: {json.dumps(agent_config, indent=2)}")
 
-        # Extract basic configuration values
-        assistant_instructions = agent_config.get(
-            "assistant_instruction", "You are a helpful voice AI assistant.")
-        welcome_message = agent_config.get(
-            "static_message", "Hello! How can I help you today?")
-        welcome_type = agent_config.get("welcome_message_type", "user_initiates")
+        # Process configuration
+        self._config = AgentConfig(
+            stt_config=self._prepare_stt_config(agent_config),
+            tts_config=self._prepare_tts_config(agent_config),
+            llm_config=self._prepare_llm_config(agent_config),
+            instructions=agent_config.get(
+                "assistant_instruction", "You are a helpful voice AI assistant."),
+            welcome_message=agent_config.get(
+                "static_message", "Hello! How can I help you today?"),
+            welcome_type=agent_config.get(
+                "welcome_message_type", "user_initiates")
+        )
 
-        # Prepare STT (Speech-to-Text) configuration
+    def _prepare_stt_config(self, config: Dict) -> Dict:
+        """Prepare STT configuration"""
         stt_config = {
-            "provider": agent_config.get("transcription_provider", "deepgram"),
-            "language": agent_config.get("agent_language", "en-US")
+            "provider": config.get("transcription_provider", "deepgram"),
+            "language": config.get("agent_language", "en-US")
         }
         logger.info(f"Using STT provider: {stt_config['provider']}")
+        return stt_config
 
-        # Prepare TTS (Text-to-Speech) configuration
+    def _prepare_tts_config(self, config: Dict) -> Dict:
+        """Prepare TTS configuration"""
         tts_config = {
-            "provider": agent_config.get("voice_provider", None),
-            "voice": agent_config.get("voice", None),
-            "custom_voice_id": agent_config.get("custom_voice_id"),
-            "speed": agent_config.get("voice_speed", 1),
-            "stability": agent_config.get("stability", 75),
-            "clarity_similarity": agent_config.get("clarity_similarity", 80),
-            "voice_improvement": agent_config.get("voice_improvement", True),
-            "language": agent_config.get("agent_language", None)
+            "provider": config.get("voice_provider", None),
+            "voice": config.get("voice", None),
+            "custom_voice_id": config.get("custom_voice_id"),
+            "speed": config.get("voice_speed", 1),
+            "stability": config.get("stability", 75),
+            "clarity_similarity": config.get("clarity_similarity", 80),
+            "voice_improvement": config.get("voice_improvement", True),
+            "language": config.get("agent_language", None)
         }
         logger.info(
             f"Using TTS provider: {tts_config['provider']} with voice: {tts_config['voice']}")
+        return tts_config
 
-        # Prepare LLM configuration with call control parameters
-        llm_config = {
-            "end_call_on_silence": agent_config.get("end_call_on_silence", False),
-            "silence_duration": agent_config.get("silence_duration", 60),
-            "max_call_duration": agent_config.get("max_call_duration", 1800),
-            "tools": agent_config.get("tools", {
+    def _prepare_llm_config(self, config: Dict) -> Dict:
+        """Prepare LLM configuration"""
+        return {
+            "end_call_on_silence": config.get("end_call_on_silence", False),
+            "silence_duration": config.get("silence_duration", 60),
+            "max_call_duration": config.get("max_call_duration", 1800),
+            "tools": config.get("tools", {
                 "email": False,
                 "calendar": False,
                 "knowledge_base": False
             })
         }
 
-        # Log the final configurations
-        logger.info("Final configuration:")
-        logger.info(f"STT Config: {json.dumps(stt_config, indent=2)}")
-        logger.info(f"TTS Config: {json.dumps(tts_config, indent=2)}")
-        logger.info(f"LLM Config: {json.dumps(llm_config, indent=2)}")
+    async def start_session(self) -> None:
+        """Start the agent session"""
+        await self._load_config()
 
-        # Dynamically create model components based on configuration
-        stt = ModelFactory.create_stt(stt_config)
-        llm = ModelFactory.create_llm(llm_config)
-        tts = ModelFactory.create_tts(tts_config)
+        # Create model components
+        stt = ModelFactory.create_stt(self._config.stt_config)
+        llm = ModelFactory.create_llm(self._config.llm_config)
+        tts = ModelFactory.create_tts(self._config.tts_config)
 
-        # Create Assistant with call ID for tracking
-        assistant = Assistant(
-            instructions=assistant_instructions, call_id=call_id)
-
-        session = AgentSession(
+        self._session = AgentSession(
             stt=stt,
             llm=llm,
             tts=tts,
@@ -218,51 +211,68 @@ async def entrypoint(ctx: agents.JobContext):
             turn_detection=MultilingualModel(),
         )
 
-        await session.start(
-            room=ctx.room,
-            agent=assistant,
+        # Start session
+        await self._session.start(
+            room=self._room_name,
+            agent=self,
             room_input_options=RoomInputOptions(
-                noise_cancellation=noise_cancellation.BVCTelephony(),
+                noise_cancellation=self._noise_cancellation,
             ),
         )
 
         # Generate welcome message
-        await session.generate_reply(
-            instructions=f"Greet the user with: {welcome_message}"
+        await self._session.generate_reply(
+            instructions=f"Greet the user with: {self._config.welcome_message}"
         )
 
-        # Record successful call completion
-        await end_call_recording(
-            call_id=call_id,
-            status="completed",
-            outcomes={
-                "final_stage": assistant.current_stage,
-                "successful": True
-            }
-        )
+    async def end_session(self, reason: str = None) -> None:
+        """End the agent session"""
+        if self._session:
+            await self._session.stop()
+
+        if reason:
+            await end_call_recording(
+                call_id=self._call_id,
+                status="dropped",
+                reason=reason
+            )
+        else:
+            await end_call_recording(
+                call_id=self._call_id,
+                status="completed",
+                outcomes={
+                    "final_stage": self._current_stage,
+                    "successful": True
+                }
+            )
+
+
+async def entrypoint(ctx: agents.JobContext):
+    """Entry point for the agent service"""
+    assistant = None
+    try:
+        # Create and initialize the assistant
+        assistant = Assistant()
+        await assistant.initialize(ctx)
+
+        # Set up signal handlers for graceful shutdown
+        loop = asyncio.get_event_loop()
+
+        def handle_signal(sig, frame):
+            logger.info(f"Received signal {sig}, ending call")
+            asyncio.create_task(assistant.end_session("system_interrupt"))
+
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            loop.add_signal_handler(sig, lambda s=sig: handle_signal(s, None))
+
+        # Start the assistant session
+        await assistant.start_session()
 
     except Exception as e:
         logger.error(f"Error in agent entrypoint: {e}")
-        # Record failed call
-        await end_call_recording(
-            call_id=call_id,
-            status="failed",
-            reason=str(e),
-            outcomes={
-                "successful": False,
-                "notes": f"Error: {str(e)}"
-            }
-        )
+        if assistant and assistant.call_id:
+            await assistant.end_session(str(e))
         raise
-
-
-async def end_call_with_reason(self, call_id: str, reason: str):
-    """Helper function to end a call with a specific reason"""
-    await end_call_recording(
-        call_id=call_id,
-        status="dropped",
-        reason=reason
-    )
 
 
 if __name__ == "__main__":
