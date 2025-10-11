@@ -100,11 +100,15 @@ class Assistant(AbstractAgent):
         logger.info(f"Processing job request for room: {self._room_name}")
 
         # Set up participant connection handler
-        ctx.room.on("participant_connected")(self.handle_participant_connected)
+        def on_participant_connected(participant: rtc.RemoteParticipant):
+            asyncio.create_task(self.handle_participant_connected(participant))
+        
+        ctx.room.on("participant_connected")(on_participant_connected)
 
     async def handle_participant_connected(self, participant: rtc.RemoteParticipant) -> None:
         """Handle participant connection events"""
         if participant.kind != rtc.ParticipantKind.PARTICIPANT_KIND_SIP:
+            logger.info(f"Participant connected: {participant}")
             return
 
         phone_number = extract_phone_number(self._room_name)
