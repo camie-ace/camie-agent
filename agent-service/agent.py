@@ -16,7 +16,8 @@ from livekit.plugins import (
 from livekit.plugins.turn_detector.multilingual import MultilingualModel
 from utils.config_fetcher import get_agent_config_from_room
 from utils.model_factory import ModelFactory
-from utils.room_extractor import extract_room_name, extract_phone_number
+# TODO: Rename this function in the module
+from utils.room_extractor import extract_room_name, extract_phone_number as extract_agent_conf_id
 from utils.call_history import (
     start_call_recording,
     update_call_config,
@@ -103,39 +104,58 @@ class Assistant(AbstractAgent):
         def on_participant_connected(participant: rtc.RemoteParticipant):
             asyncio.create_task(self.handle_participant_connected(participant))
         logger.info(f"Participant connected: {ctx.room}")
-        logger.info(f"remote Participant connected: {ctx.room.remote_participants}")
+        logger.info(
+            f"remote Participant connected: {ctx.room.remote_participants}")
         ctx.room.on("participant_connected")(on_participant_connected)
 
     async def handle_participant_connected(self, participant: rtc.RemoteParticipant) -> None:
         """Handle participant connection events"""
-        logger.info(f"Participant connected: {participant}")
-        logger.info(f"Participant connected: {participant.kind}")
-        if participant.kind != rtc.ParticipantKind.PARTICIPANT_KIND_SIP:
-            return
-
-        phone_number = extract_phone_number(self._room_name)
-        logger.info(f"Participant connected: {participant}")
-        logger.info(f"Participant identity (phone number): {phone_number}")
+        logger.info(f"Participant connected with details: {participant}")
+        logger.info(f"Participant kind: {participant.kind}")
+        logger.info(f"Participant identity: {participant.identity}")
+        logger.info(f"Participant metadata: {participant.metadata}")
 
         try:
+            # Parse metadata regardless of participant type
             metadata = json.loads(
                 participant.metadata) if participant.metadata else {}
-            call_type = metadata.get('call_type', 'inbound')
+
+            # Handle different participant types
+            if participant.kind == rtc.ParticipantKind.PARTICIPANT_KIND_SIP:
+                # Handle SIP call
+                agent_conf_id = extract_agent_conf_id(self._room_name)
+                logger.info(f"SIP call with agent config ID: {agent_conf_id}")
+                call_type = "inbound"  # Default for SIP calls
+            else:
+                # Handle web call
+                logger.info("Web call participant connected")
+                call_type = "web"
+                agent_conf_id = participant.identity
+            # Override call_type if specified in metadata
+            call_type = metadata.get('call_type', call_type)
             self._participant_metadata = metadata
-            self._noise_cancellation = noise_cancellation.BVCTelephony()
-            logger.info(f"Call type from metadata: {call_type}")
+
+            # Set noise cancellation based on call type
+            if participant.kind == rtc.ParticipantKind.PARTICIPANT_KIND_SIP:
+                self._noise_cancellation = noise_cancellation.BVCTelephony()
+            else:
+                self._noise_cancellation = noise_cancellation.BVC()
+
+            logger.info(f"Call type: {call_type}")
 
             # Start call recording
-            self._call_id = await self._start_call_recording(phone_number, call_type)
+            self._call_id = await self._start_call_recording(agent_conf_id, call_type)
 
         except json.JSONDecodeError:
             logger.error(
                 f"Failed to parse participant metadata: {participant.metadata}")
+            # Still proceed with default values
+            self._participant_metadata = {}
 
-    async def _start_call_recording(self, phone_number: str, call_type: str) -> str:
+    async def _start_call_recording(self, agent_conf_id: str, call_type: str) -> str:
         """Start call recording and return call_id"""
         call_id = await start_call_recording(
-            phone_number=phone_number,
+            agent_conf_id=agent_conf_id,  # Using the new parameter name
             room_name=self._room_name,
             call_type=call_type
         )
