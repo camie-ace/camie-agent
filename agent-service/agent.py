@@ -103,7 +103,7 @@ class Assistant(AbstractAgent):
         def on_participant_connected(participant: rtc.RemoteParticipant):
             asyncio.create_task(self.handle_participant_connected(participant))
         logger.info(f"Participant connected: {ctx.room}")
-        logger.info(f"Participant connected: {ctx.room.local_participant}")
+        logger.info(f"remote Participant connected: {ctx.room.remote_participants}")
         ctx.room.on("participant_connected")(on_participant_connected)
 
     async def handle_participant_connected(self, participant: rtc.RemoteParticipant) -> None:
