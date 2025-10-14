@@ -201,6 +201,12 @@ async def send_call_history(call_data: Dict[str, Any]) -> Dict[str, Any]:
     # Ensure the URL uses HTTPS protocol
     endpoint = ensure_https_url(endpoint)
 
+    # Clone the call_data to avoid modifying the original
+    data_to_send = call_data.copy()
+
+    # Add direction parameter (equivalent to call_type or default to "inbound")
+    data_to_send["direction"] = data_to_send.get("call_type", "inbound")
+
     # Get JWT secret for authorization if available
     jwt_secret = os.getenv("JWT_SECRET")
     headers = {}
@@ -209,8 +215,9 @@ async def send_call_history(call_data: Dict[str, Any]) -> Dict[str, Any]:
         try:
             # Create a JWT for authorization
             jwt_payload = {
-                "phone_number": call_data.get("phone_number", "unknown"),
-                "timestamp": call_data.get("end_time") or call_data.get("start_time")
+                "phone_number": data_to_send.get("phone_number", "unknown"),
+                "direction": data_to_send.get("direction", "inbound"),
+                "room_name": data_to_send.get("room_name", "unknown")
             }
             token = jwt.encode(jwt_payload, jwt_secret, algorithm="HS256")
 
@@ -224,7 +231,7 @@ async def send_call_history(call_data: Dict[str, Any]) -> Dict[str, Any]:
 
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.post(endpoint, json=call_data, headers=headers) as response:
+            async with session.post(endpoint, json=data_to_send, headers=headers) as response:
                 if response.status >= 400:
                     error_text = await response.text()
                     print(

@@ -92,69 +92,6 @@ class CallRecord:
 
         # Conversation stage timeline
         self.stage_timeline = []
-    """Represents a single call record with all relevant metadata"""
-
-    def __init__(self,
-                 phone_number: str,
-                 room_name: str,
-                 call_type: str = "inbound",
-                 call_id: Optional[str] = None):
-        """
-        Initialize a new call record
-
-        Args:
-            phone_number: The phone number associated with the call
-            room_name: The LiveKit room name for the call
-            call_type: Call direction ("inbound" or "outbound")
-            call_id: Optional ID for the call (will generate UUID if None)
-        """
-        # Basic call identification
-        self.call_id = call_id or str(uuid.uuid4())
-        self.phone_number = phone_number
-        self.room_name = room_name
-        self.call_type = call_type
-
-        # Timestamps
-        self.start_time = datetime.now().isoformat()
-        self.end_time = None
-        self.duration_seconds = None
-
-        # Call status
-        self.status = "started"  # started, completed, failed, dropped
-        self.termination_reason = None
-
-        # Agent configuration used
-        self.agent_config = {
-            "stt_config_key": None,
-            "llm_config_key": None,
-            "tts_config_key": None,
-            "business_type": None,
-            "language": None
-        }
-
-        # Call metrics
-        self.metrics = {
-            "total_user_utterances": 0,
-            "total_agent_utterances": 0,
-            "longest_user_utterance": 0,
-            "longest_agent_utterance": 0,
-            "average_user_response_time": 0,
-            "average_agent_response_time": 0,
-            "silence_count": 0,
-            "interruption_count": 0
-        }
-
-        # Call outcomes (to be determined by analyzing the conversation)
-        self.outcomes = {
-            "completion_rate": 0,
-            "fields_collected": [],
-            "final_stage": None,
-            "successful": None,  # Boolean to indicate call success
-            "notes": None        # Any additional notes about the call outcome
-        }
-
-        # Conversation stage timeline
-        self.stage_timeline = []
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert the call record to a dictionary for storage"""
@@ -324,27 +261,9 @@ async def update_call_stage(call_id: str, stage: str) -> bool:
     return await _save_call_record(active_calls[call_id].to_dict())
 
 
-async def update_call_metrics(call_id: str, metrics: Dict[str, Any]) -> bool:
-    """
-    Update metrics for a call
-
-    Args:
-        call_id: The ID of the call to update
-        metrics: The metrics to update
-
-    Returns:
-        bool: True if successful, False otherwise
-    """
-    # Check if call is in active calls
-    if call_id not in active_calls:
-        logger.warning(f"Call {call_id} not found in active calls")
-        return False
-
-    # Update the call record
-    active_calls[call_id].update_metrics(metrics)
-
-    # Save to storage
-    return await _save_call_record(active_calls[call_id].to_dict())
+# NOTE: Metrics update functionality has been removed from this agent service.
+# It should be implemented on the call history service that receives call data.
+# See documentation below for implementation details.
 
 
 async def end_call_recording(call_id: str, status: str = "completed",
@@ -394,120 +313,31 @@ async def end_call_recording(call_id: str, status: str = "completed",
     return success
 
 
-async def get_call_record(call_id: str) -> Optional[Dict[str, Any]]:
-    """
-    Get a call record by ID (only from active calls)
+"""
+Call Record Retrieval and Analytics Guide
 
-    Args:
-        call_id: The ID of the call to retrieve
+These functions were previously implemented in this module but have been removed
+since they're only used for testing purposes. In a production environment, 
+these functions should be implemented as part of a dedicated Call History 
+Service that receives and stores call data from this agent.
 
-    Returns:
-        Dict or None: The call record if found, None otherwise
-    """
-    # Only check active calls - historical data is in the external API
-    if call_id in active_calls:
-        return active_calls[call_id].to_dict()
+A proper implementation would:
 
-    # We don't have access to historical data anymore
-    logger.warning(
-        f"Call {call_id} not found in active calls and historical data not available")
-    return None
+1. Store call records in a persistent database (e.g., PostgreSQL, MongoDB)
+2. Provide a REST API to access historical call data
+3. Implement proper authentication and authorization
+4. Support filtering, pagination, and sorting
+5. Include data analytics capabilities
 
+Recommended API endpoints for the Call History Service:
 
-async def get_calls_by_phone(phone_number: str, limit: int = 10) -> List[Dict[str, Any]]:
-    """
-    Get active call records for a specific phone number
+- GET /api/calls/{call_id} - Get details for a specific call
+- GET /api/calls/phone/{phone_number} - Get calls for a specific phone number
+- GET /api/calls/recent - Get recent calls with pagination
+- GET /api/stats - Get call statistics with date filtering
+- GET /api/reports/summary - Generate summary reports
+- GET /api/reports/csv - Export call data to CSV
 
-    Note: Historical data is only available via the external API
-
-    Args:
-        phone_number: The phone number to retrieve calls for
-        limit: Maximum number of records to return
-
-    Returns:
-        List: List of active call records
-    """
-    # Filter active calls by phone number
-    matching_calls = [
-        call.to_dict() for call in active_calls.values()
-        if call.phone_number == phone_number
-    ]
-
-    logger.warning(
-        "Historical call data is not available locally, only active calls are returned")
-    return matching_calls[:limit]
-
-
-async def get_recent_calls(limit: int = 20) -> List[Dict[str, Any]]:
-    """
-    Get active call records
-
-    Note: Historical data is only available via the external API
-
-    Args:
-        limit: Maximum number of records to return
-
-    Returns:
-        List: List of active call records
-    """
-    # Return all active calls
-    active_call_records = [call.to_dict() for call in active_calls.values()]
-
-    logger.warning(
-        "Historical call data is not available locally, only active calls are returned")
-    return active_call_records[:limit]
-
-
-async def get_call_statistics(start_date: Optional[str] = None,
-                              end_date: Optional[str] = None) -> Dict[str, Any]:
-    """
-    Get statistics on active calls
-
-    Note: Historical data is only available via the external API
-
-    Args:
-        start_date: Start date for filtering (ISO format)
-        end_date: End date for filtering (ISO format)
-
-    Returns:
-        Dict: Call statistics
-    """
-    logger.warning(
-        "Historical call statistics are not available locally, only active calls are counted")
-
-    # Only count active calls
-    active_call_records = [call.to_dict() for call in active_calls.values()]
-
-    # Calculate statistics
-    total_calls = len(active_call_records)
-    completed_calls = sum(
-        1 for call in active_call_records if call.get('status') == 'completed')
-    failed_calls = sum(
-        1 for call in active_call_records if call.get('status') == 'failed')
-    dropped_calls = sum(
-        1 for call in active_call_records if call.get('status') == 'dropped')
-
-    # Count calls by business type
-    business_types = {}
-    for call in active_call_records:
-        business_type = call.get('agent_config', {}).get(
-            'business_type', 'unknown')
-        business_types[business_type] = business_types.get(
-            business_type, 0) + 1
-
-    # Count calls by language
-    languages = {}
-    for call in active_call_records:
-        language = call.get('agent_config', {}).get('language', 'unknown')
-        languages[language] = languages.get(language, 0) + 1
-
-    return {
-        "total_calls": total_calls,
-        "completed_calls": completed_calls,
-        "failed_calls": failed_calls,
-        "dropped_calls": dropped_calls,
-        "completion_rate": (completed_calls / total_calls if total_calls else 0),
-        "calls_by_business_type": business_types,
-        "calls_by_language": languages,
-        "note": "Statistics are for active calls only. Historical data is stored in the external API."
-    }
+For implementation details, refer to the docs/CALL_HISTORY_API.md and
+docs/CALL_HISTORY.md documentation files.
+"""

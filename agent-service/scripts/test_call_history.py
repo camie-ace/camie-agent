@@ -14,8 +14,10 @@ from utils.call_history import (
     start_call_recording,
     update_call_config,
     update_call_stage,
+    end_call_recording
+)
+from utils.call_history_test_utils import (
     update_call_metrics,
-    end_call_recording,
     get_call_record,
     get_recent_calls
 )

@@ -3,421 +3,513 @@ Business tools for dynamic agent configurations
 Handles client context, information collection, business logic, and API integrations
 """
 
-import asyncio
-from typing import Dict, Any, Optional, List
-from datetime import datetime
+from typing import Dict, Any, Callable, List, Optional, Union
+import logging
+import os
+import requests
+import json
 
-# Stubs for removed API functions
+# Configure logging
+logger = logging.getLogger(__name__)
+
+# Specialized tool implementations
+# Knowledge Base Tool
+
+
 async def query_knowledge_base(query: str, context: Dict[str, Any] = None) -> str:
-    """Stub replacement for removed function"""
-    print(f"[STUB] query_knowledge_base called with: {query}")
-    return "I don't have specific information about that right now. Let me see how else I can help you."
+    """
+    Query a vector database for knowledge based on the query
+
+    Args:
+        query: The search query
+        context: Additional context for the query (optional)
+
+    Returns:
+        String containing the knowledge base response
+    """
+    try:
+        kb_api_url = os.getenv("KNOWLEDGE_BASE_API_URL")
+        if not kb_api_url:
+            logger.error("KNOWLEDGE_BASE_API_URL environment variable not set")
+            return "I can't access the knowledge base at the moment."
+
+        headers = {"Content-Type": "application/json"}
+        payload = {
+            "query": query,
+            "context": context or {}
+        }
+
+        response = requests.post(
+            kb_api_url, headers=headers, json=payload, timeout=10)
+        if response.status_code == 200:
+            result = response.json()
+            return result.get("answer", "I found information but couldn't process it properly.")
+        else:
+            logger.error(
+                f"Knowledge base API returned status {response.status_code}")
+            return "I encountered an issue when searching for that information."
+
+    except Exception as e:
+        logger.exception(f"Error querying knowledge base: {str(e)}")
+        return "I'm having trouble accessing that information right now."
+
+# SMS Sending Tool
+
+
+async def send_sms(recipient: str, message: str) -> Dict[str, Any]:
+    """
+    Send an SMS message to the specified recipient
+
+    Args:
+        recipient: Phone number to send the SMS to
+        message: The message content to send
+
+    Returns:
+        Dictionary with success status and message
+    """
+    try:
+        sms_api_url = os.getenv("SMS_API_URL")
+        if not sms_api_url:
+            logger.error("SMS_API_URL environment variable not set")
+            return {"success": False, "message": "SMS service is not configured."}
+
+        headers = {"Content-Type": "application/json"}
+        payload = {
+            "to": recipient,
+            "message": message
+        }
+
+        response = requests.post(
+            sms_api_url, headers=headers, json=payload, timeout=10)
+        if response.status_code == 200:
+            return {"success": True, "message": "SMS sent successfully."}
+        else:
+            error_msg = f"SMS API returned status {response.status_code}"
+            logger.error(error_msg)
+            return {"success": False, "message": f"Failed to send SMS: {error_msg}"}
+
+    except Exception as e:
+        error_msg = f"Error sending SMS: {str(e)}"
+        logger.exception(error_msg)
+        return {"success": False, "message": error_msg}
+
+# Cal.com Integration Tools
+
+
+async def calcom_check_availability(date: str, service_type: str = None) -> Dict[str, Any]:
+    """
+    Check availability on Cal.com for a specific date and service
+
+    Args:
+        date: The date to check in ISO format (YYYY-MM-DD)
+        service_type: Optional service type to filter available slots
+
+    Returns:
+        Dictionary with availability information
+    """
+    try:
+        calcom_api_url = os.getenv("CALCOM_API_URL")
+        api_key = os.getenv("CALCOM_API_KEY")
+
+        if not calcom_api_url or not api_key:
+            logger.error("Cal.com API configuration missing")
+            return {"success": False, "available": False, "message": "Calendar service is not configured."}
+
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}"
+        }
+
+        payload = {
+            "date": date,
+            "serviceType": service_type
+        }
+
+        response = requests.post(
+            f"{calcom_api_url}/availability", headers=headers, json=payload, timeout=10)
+        if response.status_code == 200:
+            result = response.json()
+            return {
+                "success": True,
+                "available": result.get("available", False),
+                "slots": result.get("availableSlots", []),
+                "message": "Successfully retrieved availability."
+            }
+        else:
+            error_msg = f"Cal.com API returned status {response.status_code}"
+            logger.error(error_msg)
+            return {"success": False, "available": False, "message": error_msg}
+
+    except Exception as e:
+        error_msg = f"Error checking Cal.com availability: {str(e)}"
+        logger.exception(error_msg)
+        return {"success": False, "available": False, "message": error_msg}
+
+
+async def calcom_book_appointment(appointment_details: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Book an appointment on Cal.com
+
+    Args:
+        appointment_details: Dictionary containing appointment details
+            (date, time, service_type, name, email, etc.)
+
+    Returns:
+        Dictionary with booking status and confirmation details
+    """
+    try:
+        calcom_api_url = os.getenv("CALCOM_API_URL")
+        api_key = os.getenv("CALCOM_API_KEY")
+
+        if not calcom_api_url or not api_key:
+            logger.error("Cal.com API configuration missing")
+            return {"success": False, "message": "Calendar booking service is not configured."}
+
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}"
+        }
+
+        response = requests.post(
+            f"{calcom_api_url}/bookings", headers=headers, json=appointment_details, timeout=10)
+        if response.status_code == 200:
+            result = response.json()
+            return {
+                "success": True,
+                "booking_id": result.get("id"),
+                "confirmation_link": result.get("confirmationLink", ""),
+                "message": "Appointment booked successfully."
+            }
+        else:
+            error_msg = f"Cal.com API returned status {response.status_code}"
+            logger.error(error_msg)
+            return {"success": False, "message": f"Failed to book appointment: {error_msg}"}
+
+    except Exception as e:
+        error_msg = f"Error booking Cal.com appointment: {str(e)}"
+        logger.exception(error_msg)
+        return {"success": False, "message": error_msg}
+
+
+async def calcom_modify_booking(booking_id: str, updates: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Modify an existing Cal.com booking
+
+    Args:
+        booking_id: ID of the booking to modify
+        updates: Dictionary containing the fields to update
+
+    Returns:
+        Dictionary with modification status
+    """
+    try:
+        calcom_api_url = os.getenv("CALCOM_API_URL")
+        api_key = os.getenv("CALCOM_API_KEY")
+
+        if not calcom_api_url or not api_key:
+            logger.error("Cal.com API configuration missing")
+            return {"success": False, "message": "Calendar service is not configured."}
+
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}"
+        }
+
+        response = requests.patch(
+            f"{calcom_api_url}/bookings/{booking_id}",
+            headers=headers,
+            json=updates,
+            timeout=10
+        )
+
+        if response.status_code in [200, 204]:
+            return {
+                "success": True,
+                "message": "Booking updated successfully."
+            }
+        else:
+            error_msg = f"Cal.com API returned status {response.status_code}"
+            logger.error(error_msg)
+            return {"success": False, "message": f"Failed to update booking: {error_msg}"}
+
+    except Exception as e:
+        error_msg = f"Error updating Cal.com booking: {str(e)}"
+        logger.exception(error_msg)
+        return {"success": False, "message": error_msg}
+
+# Google Calendar Integration Tools
+
+
+async def gcal_check_availability(date: str, service_type: str = None) -> Dict[str, Any]:
+    """
+    Check availability on Google Calendar for a specific date
+
+    Args:
+        date: The date to check in ISO format (YYYY-MM-DD)
+        service_type: Optional service type/calendar to check
+
+    Returns:
+        Dictionary with availability information
+    """
+    try:
+        gcal_api_url = os.getenv("GCAL_API_URL")
+        api_key = os.getenv("GCAL_API_KEY")
+
+        if not gcal_api_url or not api_key:
+            logger.error("Google Calendar API configuration missing")
+            return {"success": False, "available": False, "message": "Google Calendar service is not configured."}
+
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}"
+        }
+
+        calendar_id = service_type if service_type else "primary"
+
+        response = requests.get(
+            f"{gcal_api_url}/calendars/{calendar_id}/free-busy",
+            headers=headers,
+            params={"date": date},
+            timeout=10
+        )
+
+        if response.status_code == 200:
+            result = response.json()
+            return {
+                "success": True,
+                "available": not result.get("busy", True),
+                "slots": result.get("availableSlots", []),
+                "message": "Successfully retrieved availability."
+            }
+        else:
+            error_msg = f"Google Calendar API returned status {response.status_code}"
+            logger.error(error_msg)
+            return {"success": False, "available": False, "message": error_msg}
+
+    except Exception as e:
+        error_msg = f"Error checking Google Calendar availability: {str(e)}"
+        logger.exception(error_msg)
+        return {"success": False, "available": False, "message": error_msg}
+
+
+async def gcal_book_appointment(appointment_details: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Book an appointment on Google Calendar
+
+    Args:
+        appointment_details: Dictionary containing appointment details
+            (date, time, summary, description, attendees, etc.)
+
+    Returns:
+        Dictionary with booking status and confirmation details
+    """
+    try:
+        gcal_api_url = os.getenv("GCAL_API_URL")
+        api_key = os.getenv("GCAL_API_KEY")
+
+        if not gcal_api_url or not api_key:
+            logger.error("Google Calendar API configuration missing")
+            return {"success": False, "message": "Google Calendar service is not configured."}
+
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}"
+        }
+
+        calendar_id = appointment_details.pop("calendar_id", "primary")
+
+        response = requests.post(
+            f"{gcal_api_url}/calendars/{calendar_id}/events",
+            headers=headers,
+            json=appointment_details,
+            timeout=10
+        )
+
+        if response.status_code == 200:
+            result = response.json()
+            return {
+                "success": True,
+                "event_id": result.get("id"),
+                "link": result.get("htmlLink", ""),
+                "message": "Appointment booked successfully on Google Calendar."
+            }
+        else:
+            error_msg = f"Google Calendar API returned status {response.status_code}"
+            logger.error(error_msg)
+            return {"success": False, "message": f"Failed to book appointment: {error_msg}"}
+
+    except Exception as e:
+        error_msg = f"Error booking Google Calendar appointment: {str(e)}"
+        logger.exception(error_msg)
+        return {"success": False, "message": error_msg}
+
+
+async def gcal_modify_booking(event_id: str, calendar_id: str, updates: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Modify an existing Google Calendar event
+
+    Args:
+        event_id: ID of the event to modify
+        calendar_id: ID of the calendar containing the event
+        updates: Dictionary containing the fields to update
+
+    Returns:
+        Dictionary with modification status
+    """
+    try:
+        gcal_api_url = os.getenv("GCAL_API_URL")
+        api_key = os.getenv("GCAL_API_KEY")
+
+        if not gcal_api_url or not api_key:
+            logger.error("Google Calendar API configuration missing")
+            return {"success": False, "message": "Google Calendar service is not configured."}
+
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}"
+        }
+
+        calendar_id = calendar_id or "primary"
+
+        response = requests.patch(
+            f"{gcal_api_url}/calendars/{calendar_id}/events/{event_id}",
+            headers=headers,
+            json=updates,
+            timeout=10
+        )
+
+        if response.status_code == 200:
+            return {
+                "success": True,
+                "message": "Event updated successfully on Google Calendar."
+            }
+        else:
+            error_msg = f"Google Calendar API returned status {response.status_code}"
+            logger.error(error_msg)
+            return {"success": False, "message": f"Failed to update event: {error_msg}"}
+
+    except Exception as e:
+        error_msg = f"Error updating Google Calendar event: {str(e)}"
+        logger.exception(error_msg)
+        return {"success": False, "message": error_msg}
+
+# Generic API Action Handler
+
 
 async def execute_api_action(action: str, parameters: Dict[str, Any]) -> Dict[str, Any]:
-    """Stub replacement for removed function"""
-    print(f"[STUB] execute_api_action called with action: {action}")
-    return {
-        "success": False,
-        "message": f"The {action} functionality is not available at this time."
-    }
+    """
+    Execute a generic API action
+
+    Args:
+        action: The action to perform
+        parameters: Parameters for the action
+
+    Returns:
+        Dictionary with action result
+    """
+    try:
+        logger.info(
+            f"Executing API action: {action} with parameters: {parameters}")
+
+        # Route to appropriate specialized function based on action
+        if action == "query_knowledge":
+            result = await query_knowledge_base(parameters.get("query", ""), parameters.get("context"))
+            return {"success": True, "result": result}
+        elif action == "send_sms":
+            return await send_sms(parameters.get("recipient"), parameters.get("message"))
+        elif action == "check_calcom_availability":
+            return await calcom_check_availability(parameters.get("date"), parameters.get("service_type"))
+        elif action == "book_calcom_appointment":
+            return await calcom_book_appointment(parameters)
+        elif action == "modify_calcom_booking":
+            return await calcom_modify_booking(parameters.get("booking_id"), parameters.get("updates", {}))
+        elif action == "check_gcal_availability":
+            return await gcal_check_availability(parameters.get("date"), parameters.get("service_type"))
+        elif action == "book_gcal_appointment":
+            return await gcal_book_appointment(parameters)
+        elif action == "modify_gcal_booking":
+            return await gcal_modify_booking(
+                parameters.get("event_id"),
+                parameters.get("calendar_id"),
+                parameters.get("updates", {})
+            )
+        else:
+            logger.warning(f"Unknown API action requested: {action}")
+            return {
+                "success": False,
+                "message": f"The {action} functionality is not recognized."
+            }
+    except Exception as e:
+        error_msg = f"Error executing API action {action}: {str(e)}"
+        logger.exception(error_msg)
+        return {"success": False, "message": error_msg}
 
 
-class DynamicBusinessAgent:
-    """Business logic for dynamic agent configurations based on phone number settings"""
+class BusinessSession:
+    """
+    Session class to manage business interactions
+    """
 
     def __init__(self, business_config: Dict[str, Any] = None):
-        self.client_info = {}
-        self.conversation_stage = "introduction"
+        self.config = business_config or {}
+        self.conversation_context = {
+            "stage": "greeting",
+            "collected_info": {},
+            "last_action": None
+        }
 
-        # Load configuration from business_config or use generic defaults
-        if business_config:
-            self.required_fields = business_config.get("required_fields", [])
-            self.stage_map = business_config.get("stage_map", {
-                "introduction": 1,
-                "info_collection": 2,
-                "validation": 3,
-                "solution_presentation": 4,
-                "transfer_proposal": 5,
-                "closing": 6
-            })
-            self.question_map = business_config.get("question_map", {})
-            self.business_type = business_config.get(
-                "business_type", "default")
-            self.language = business_config.get("language", "en")
-        else:
-            # Generic defaults - no business-specific assumptions
-            self.required_fields = ["customer_name", "inquiry_type"]
-            self.stage_map = {
-                "introduction": 1,
-                "info_collection": 2,
-                "validation": 3,
-                "closing": 4
-            }
-            self.question_map = {
-                "customer_name": "May I have your name please?",
-                "inquiry_type": "How can I help you today?"
-            }
-            self.business_type = "generic"
-            self.language = "en"
-
-    async def update_conversation_stage(self, stage: str):
-        """Update the current conversation stage"""
-        if stage in self.stage_map:
-            self.conversation_stage = stage
-            print(f"Conversation stage updated to: {stage}")
-        return self.conversation_stage
+    async def get_conversation_context(self) -> Dict[str, Any]:
+        """Get the current conversation context"""
+        return self.conversation_context
 
     async def collect_client_info(self, field: str, value: str) -> bool:
-        """Collect and validate client information"""
-        if field in self.required_fields:
-            self.client_info[field] = value
-            self.client_info[f"{field}_collected_at"] = datetime.now(
-            ).isoformat()
-            print(f"Collected {field}: {value}")
+        """Collect client information"""
+        if field and value:
+            self.conversation_context.setdefault(
+                "collected_info", {})[field] = value
             return True
         return False
 
-    async def get_missing_fields(self) -> list:
-        """Get list of required fields that haven't been collected"""
-        return [field for field in self.required_fields if field not in self.client_info]
-
-    async def is_collection_complete(self) -> bool:
-        """Check if all required information has been collected"""
-        return len(await self.get_missing_fields()) == 0
-
-    async def get_client_summary(self) -> str:
-        """Generate a summary of collected client information"""
-        if not self.client_info:
-            return "No information collected" if self.language == "en" else "Aucune information collectée"
-
-        summary_parts = []
-
-        # Generic fields that work across business types
-        name_fields = []
-        if "first_name" in self.client_info:
-            name_fields.append(self.client_info["first_name"])
-        if "last_name" in self.client_info:
-            name_fields.append(self.client_info["last_name"])
-        if "customer_name" in self.client_info:
-            name_fields.append(self.client_info["customer_name"])
-        if "contact_name" in self.client_info:
-            name_fields.append(self.client_info["contact_name"])
-
-        if name_fields:
-            name_label = "Name" if self.language == "en" else "Nom"
-            summary_parts.append(f"{name_label}: {' '.join(name_fields)}")
-
-        # Business-specific summaries
-        if self.business_type == "social_housing":
-            summary_parts.extend(self._get_social_housing_summary())
-        elif self.business_type == "sales_consultation":
-            summary_parts.extend(self._get_sales_summary())
-        elif self.business_type == "restaurant":
-            summary_parts.extend(self._get_restaurant_summary())
-        elif self.business_type == "tech_support":
-            summary_parts.extend(self._get_tech_support_summary())
-        else:
-            # Generic summary for unknown business types
-            for field, value in self.client_info.items():
-                if field not in ["first_name", "last_name", "customer_name", "contact_name"] and not field.endswith("_collected_at"):
-                    summary_parts.append(
-                        f"{field.replace('_', ' ').title()}: {value}")
-
-        return "; ".join(summary_parts) if summary_parts else ("Basic information collected" if self.language == "en" else "Informations de base collectées")
-
-    def _get_social_housing_summary(self) -> List[str]:
-        """Generate summary for social housing business type"""
-        parts = []
-
-        if "department" in self.client_info:
-            parts.append(f"Département: {self.client_info['department']}")
-        if "housing_status" in self.client_info:
-            parts.append(
-                f"Statut logement: {self.client_info['housing_status']}")
-        if "household_size" in self.client_info:
-            parts.append(
-                f"Taille du foyer: {self.client_info['household_size']} personnes")
-        if "monthly_income" in self.client_info:
-            parts.append(
-                f"Revenus mensuels: {self.client_info['monthly_income']} euros")
-
-        # Special situations
-        special_situations = []
-        if self.client_info.get("is_insalubrious") == "oui":
-            special_situations.append("logement insalubre")
-        if self.client_info.get("has_disability") == "oui":
-            special_situations.append("situation de handicap")
-        if self.client_info.get("expulsion_threat") == "oui":
-            special_situations.append("menace d'expulsion")
-
-        if special_situations:
-            parts.append(
-                f"Situations particulières: {', '.join(special_situations)}")
-
-        return parts
-
-    def _get_sales_summary(self) -> List[str]:
-        """Generate summary for sales consultation business type"""
-        parts = []
-
-        if "company_name" in self.client_info:
-            parts.append(f"Company: {self.client_info['company_name']}")
-        if "industry" in self.client_info:
-            parts.append(f"Industry: {self.client_info['industry']}")
-        if "company_size" in self.client_info:
-            parts.append(
-                f"Company Size: {self.client_info['company_size']} employees")
-        if "main_challenge" in self.client_info:
-            parts.append(
-                f"Main Challenge: {self.client_info['main_challenge']}")
-        if "decision_authority" in self.client_info:
-            parts.append(
-                f"Decision Maker: {self.client_info['decision_authority']}")
-
-        return parts
-
-    def _get_restaurant_summary(self) -> List[str]:
-        """Generate summary for restaurant business type"""
-        parts = []
-
-        if "party_size" in self.client_info:
-            parts.append(
-                f"Party Size: {self.client_info['party_size']} people")
-        if "preferred_date" in self.client_info:
-            parts.append(
-                f"Preferred Date: {self.client_info['preferred_date']}")
-        if "preferred_time" in self.client_info:
-            parts.append(
-                f"Preferred Time: {self.client_info['preferred_time']}")
-
-        return parts
-
-    def _get_tech_support_summary(self) -> List[str]:
-        """Generate summary for tech support business type"""
-        parts = []
-
-        if "product_id" in self.client_info:
-            parts.append(f"Product: {self.client_info['product_id']}")
-        if "issue_description" in self.client_info:
-            parts.append(f"Issue: {self.client_info['issue_description']}")
-        if "issue_severity" in self.client_info:
-            parts.append(f"Severity: {self.client_info['issue_severity']}")
-
-        return parts
-
-    async def determine_next_question(self) -> Optional[str]:
-        """Determine the next question to ask based on current state"""
-        missing_fields = await self.get_missing_fields()
-
-        if not missing_fields:
-            return None
-
-        # Use configured question mapping
-        return self.question_map.get(missing_fields[0], f"Can you provide information about {missing_fields[0]}?")
-
-    async def assess_eligibility(self) -> Dict[str, Any]:
-        """Assess client eligibility based on business type"""
-        assessment = {
-            "eligible": True,
-            "priority_factors": [],
-            "recommended_action": "standard_application",
-            "notes": [],
-            "business_type": self.business_type
-        }
-
-        # Business-specific eligibility logic
-        if self.business_type == "social_housing":
-            return await self._assess_social_housing_eligibility(assessment)
-        elif self.business_type == "tech_support":
-            return await self._assess_tech_support_eligibility(assessment)
-        elif self.business_type == "restaurant":
-            return await self._assess_restaurant_eligibility(assessment)
-        else:
-            # Generic assessment
-            assessment["notes"].append("generic_assessment")
-            return assessment
-
-    async def _assess_social_housing_eligibility(self, assessment: Dict[str, Any]) -> Dict[str, Any]:
-        """Social housing specific eligibility assessment"""
-        # Check priority factors
-        if self.client_info.get("is_insalubrious") == "oui":
-            assessment["priority_factors"].append("logement_insalubre")
-
-        if self.client_info.get("has_disability") == "oui":
-            assessment["priority_factors"].append("handicap")
-
-        if self.client_info.get("expulsion_threat") == "oui":
-            assessment["priority_factors"].append("expulsion")
-            assessment["recommended_action"] = "urgent_dalo"
-
-        # Income assessment (simplified)
-        if "monthly_income" in self.client_info:
-            try:
-                income = float(self.client_info["monthly_income"].replace(
-                    "€", "").replace(",", "."))
-                household_size = int(self.client_info.get("household_size", 1))
-
-                # Simplified income thresholds (actual thresholds vary by region)
-                income_threshold = 1500 * household_size  # Basic threshold
-
-                if income > income_threshold * 1.5:
-                    assessment["eligible"] = False
-                    assessment["notes"].append("revenus_trop_eleves")
-                elif income < income_threshold * 0.3:
-                    assessment["priority_factors"].append(
-                        "revenus_tres_faibles")
-            except (ValueError, TypeError):
-                assessment["notes"].append("revenus_a_verifier")
-
-        return assessment
-
-    async def _assess_tech_support_eligibility(self, assessment: Dict[str, Any]) -> Dict[str, Any]:
-        """Tech support specific assessment"""
-        if "product_id" in self.client_info:
-            assessment["priority_factors"].append("product_identified")
-        if "issue_severity" in self.client_info and self.client_info["issue_severity"] == "critical":
-            assessment["recommended_action"] = "urgent_escalation"
-        return assessment
-
-    async def _assess_restaurant_eligibility(self, assessment: Dict[str, Any]) -> Dict[str, Any]:
-        """Restaurant specific assessment"""
-        if "party_size" in self.client_info:
-            party_size = int(self.client_info.get("party_size", 1))
-            if party_size > 8:
-                assessment["recommended_action"] = "large_party_reservation"
-        return assessment
+    async def update_conversation_stage(self, stage: str) -> str:
+        """Update the conversation stage"""
+        self.conversation_context["stage"] = stage
+        return stage
 
     async def query_information(self, query: str) -> str:
-        """Query vector database for information relevant to the business type"""
-        context = {
-            "business_type": self.business_type,
-            "conversation_stage": self.conversation_stage,
-            "client_info": self.client_info,
-            "required_fields": self.required_fields
-        }
-
-        try:
-            response = await query_knowledge_base(query, context)
-            print(f"Knowledge base query: {query} -> {response[:100]}...")
-            return response
-        except Exception as e:
-            print(f"Error querying knowledge base: {e}")
-            return "I'm sorry, I couldn't retrieve that information right now. Let me help you in another way."
-
-    async def execute_action(self, action: str, parameters: Dict[str, Any]) -> Dict[str, Any]:
-        """Execute external API actions based on business needs"""
-        try:
-            # Add business context to parameters
-            enhanced_parameters = {
-                **parameters,
-                "business_type": self.business_type,
-                "conversation_stage": self.conversation_stage,
-                "client_info": self.client_info
-            }
-
-            result = await execute_api_action(action, enhanced_parameters)
-            print(f"Executed action {action}: {result.get('success', False)}")
-            return result
-        except Exception as e:
-            print(f"Error executing action {action}: {e}")
-            return {
-                "success": False,
-                "message": f"Unable to complete {action} at this time",
-                "error": str(e)
-            }
+        """Query knowledge base with context"""
+        return await query_knowledge_base(
+            query,
+            self.conversation_context
+        )
 
     async def handle_appointment_booking(self, appointment_details: Dict[str, Any]) -> Dict[str, Any]:
-        """Handle appointment booking for various business types"""
-        # Validate required fields based on business type
-        required_fields = ["customer_name", "preferred_date", "preferred_time"]
+        """Handle appointment booking based on config"""
+        calendar_type = self.config.get("calendar_type", "calcom")
 
-        if self.business_type == "restaurant":
-            required_fields.extend(["party_size"])
-        elif self.business_type == "tech_support":
-            required_fields.extend(["service_type", "issue_description"])
-        elif self.business_type == "social_housing":
-            required_fields.extend(["department", "housing_status"])
-
-        missing_fields = [
-            field for field in required_fields if not appointment_details.get(field)]
-
-        if missing_fields:
+        if calendar_type == "calcom":
+            return await calcom_book_appointment(appointment_details)
+        elif calendar_type == "google":
+            return await gcal_book_appointment(appointment_details)
+        else:
             return {
                 "success": False,
-                "message": f"Missing required information: {', '.join(missing_fields)}",
-                "missing_fields": missing_fields
+                "message": f"Unknown calendar type: {calendar_type}"
             }
-
-        # Book the appointment
-        return await self.execute_action("book_appointment", appointment_details)
 
     async def check_availability(self, date: str, service_type: str = None) -> Dict[str, Any]:
-        """Check availability for appointments"""
-        return await self.execute_action("check_availability", {
-            "date": date,
-            "service_type": service_type or self.business_type
-        })
+        """Check availability based on config"""
+        calendar_type = self.config.get("calendar_type", "calcom")
 
-    async def update_customer_record(self, additional_info: Dict[str, Any] = None) -> Dict[str, Any]:
-        """Update customer record in CRM"""
-        crm_data = {
-            "phone_number": additional_info.get("phone_number") if additional_info else None,
-            "name": f"{self.client_info.get('first_name', '')} {self.client_info.get('last_name', '')}".strip(),
-            "email": self.client_info.get("email"),
-            "company": self.client_info.get("company_name"),
-            "interaction_type": "phone_call",
-            "stage": self.conversation_stage,
-            "notes": f"Business type: {self.business_type}, Stage: {self.conversation_stage}",
-            "lead_score": self._calculate_lead_score()
-        }
-
-        if additional_info:
-            crm_data.update(additional_info)
-
-        return await self.execute_action("update_crm", crm_data)
-
-    def _calculate_lead_score(self) -> int:
-        """Calculate basic lead score based on collected information"""
-        score = 0
-
-        # Base score for engagement
-        score += len(self.client_info) * 10
-
-        # Business-specific scoring
-        if self.business_type == "sales_consultation":
-            if self.client_info.get("decision_authority") == "yes":
-                score += 30
-            if self.client_info.get("timeline") in ["immediate", "this_month"]:
-                score += 20
-        elif self.business_type == "restaurant":
-            if self.client_info.get("party_size"):
-                try:
-                    party_size = int(self.client_info["party_size"])
-                    # Larger parties are more valuable
-                    score += min(party_size * 5, 25)
-                except (ValueError, TypeError):
-                    pass
-
-        return min(score, 100)  # Cap at 100
-
-    async def get_conversation_context(self) -> Dict[str, Any]:
-        """Get complete conversation context for agent"""
-        return {
-            "stage": self.conversation_stage,
-            "stage_number": self.stage_map.get(self.conversation_stage, 0),
-            "client_info": self.client_info,
-            "missing_fields": await self.get_missing_fields(),
-            "completion_rate": (len(self.required_fields) - len(await self.get_missing_fields())) / len(self.required_fields) if self.required_fields else 1.0,
-            "next_question": await self.determine_next_question(),
-            "eligibility": await self.assess_eligibility() if await self.is_collection_complete() else None,
-            "business_type": self.business_type,
-            "api_capabilities": {
-                "can_query_knowledge": True,
-                "can_book_appointments": True,
-                "can_check_availability": True,
-                "can_update_crm": True
+        if calendar_type == "calcom":
+            return await calcom_check_availability(date, service_type)
+        elif calendar_type == "google":
+            return await gcal_check_availability(date, service_type)
+        else:
+            return {
+                "success": False,
+                "available": False,
+                "message": f"Unknown calendar type: {calendar_type}"
             }
-        }
 
 
 class ContextManager:
@@ -427,10 +519,10 @@ class ContextManager:
         self.sessions = {}
         self.business_configs = {}
 
-    async def get_session(self, user_id: str, business_config: Dict[str, Any] = None) -> DynamicBusinessAgent:
+    async def get_session(self, user_id: str, business_config: Dict[str, Any] = None) -> BusinessSession:
         """Get or create a session for a user with specific business configuration"""
         if user_id not in self.sessions:
-            self.sessions[user_id] = DynamicBusinessAgent(business_config)
+            self.sessions[user_id] = BusinessSession(business_config)
             if business_config:
                 self.business_configs[user_id] = business_config
         return self.sessions[user_id]
@@ -442,7 +534,7 @@ class ContextManager:
         if user_id in self.business_configs:
             del self.business_configs[user_id]
 
-    async def get_all_sessions(self) -> Dict[str, DynamicBusinessAgent]:
+    async def get_all_sessions(self) -> Dict[str, BusinessSession]:
         """Get all active sessions (for debugging)"""
         return self.sessions
 
@@ -450,7 +542,7 @@ class ContextManager:
         """Update business configuration for an existing session"""
         if user_id in self.sessions:
             # Update existing session with new config
-            self.sessions[user_id] = DynamicBusinessAgent(business_config)
+            self.sessions[user_id] = BusinessSession(business_config)
             self.business_configs[user_id] = business_config
 
 
@@ -494,7 +586,37 @@ async def check_user_availability(user_id: str, date: str, service_type: str = N
     return await session.check_availability(date, service_type)
 
 
-async def update_user_crm(user_id: str, additional_info: Dict[str, Any] = None) -> Dict[str, Any]:
-    """Update user CRM record"""
-    session = await context_manager.get_session(user_id)
-    return await session.update_customer_record(additional_info)
+def get_tool_by_name(tool_name: str) -> Optional[Callable]:
+    """
+    Get a callable tool function by name
+
+    Args:
+        tool_name: The name of the tool to get
+
+    Returns:
+        Callable function for the requested tool, or None if not found
+    """
+    tools_map = {
+        "knowledge_base": query_knowledge_base,
+        "sms": send_sms,
+
+        # Cal.com tools
+        "calcom_availability": calcom_check_availability,
+        "calcom_booking": calcom_book_appointment,
+        "calcom_modify": calcom_modify_booking,
+
+        # Google Calendar tools
+        "gcal_availability": gcal_check_availability,
+        "gcal_booking": gcal_book_appointment,
+        "gcal_modify": gcal_modify_booking,
+
+        # Business context tools
+        "get_business_context": get_business_context,
+        "update_client_info": update_client_info,
+        "advance_conversation": advance_conversation_stage,
+        "query_user_info": query_user_information,
+        "book_appointment": book_user_appointment,
+        "check_availability": check_user_availability
+    }
+
+    return tools_map.get(tool_name)
