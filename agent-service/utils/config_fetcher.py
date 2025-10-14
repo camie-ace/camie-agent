@@ -104,16 +104,17 @@ async def fetch_agent_config(agent_conf_id: str, call_direction: Optional[str] =
 
         # Look for the phone number in the data
         # The phone number might be with or without a plus, so check both formats
-        phone_config = data.get(agent_conf_id, None)
-        if phone_config is None and agent_conf_id.startswith('+'):
+        agent_config = data.get("phone_number", None)
+        if agent_config is None and agent_conf_id.startswith('+'):
             # Try without the plus
             agent_config = data.get(agent_conf_id[1:], None)
         if agent_config is None and not agent_conf_id.startswith('+'):
             # Try with the plus
-            agent_config = data.get(f"{agent_conf_id}", None)
+            agent_config = data.get(f"+{agent_conf_id}", None)
 
         if not agent_config:
-            print(f"No configuration found for agent configuration ID: {agent_conf_id}")
+            print(
+                f"No configuration found for agent configuration ID: {agent_conf_id}")
             return {}, None
 
         # If call_direction is provided, use it to get the specific config
@@ -144,7 +145,8 @@ async def get_agent_config_from_room(room_name: str, participant_metadata: Optio
     agent_conf_id = await extract_agent_conf_id_from_room_name(room_name)
 
     if not agent_conf_id:
-        print(f"Could not extract agent configuration ID from room name: {room_name}")
+        print(
+            f"Could not extract agent configuration ID from room name: {room_name}")
         return {}
 
     # Extract call direction from metadata if available
