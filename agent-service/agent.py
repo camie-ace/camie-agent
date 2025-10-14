@@ -44,6 +44,7 @@ class ToolConfig:
 @dataclass
 class AgentConfig:
     """Data class to hold agent configuration"""
+    ctx: agents.JobContext
     stt_config: Dict[str, Any]
     tts_config: Dict[str, Any]
     llm_config: Dict[str, Any]
@@ -81,12 +82,13 @@ class AbstractAgent(Agent, ABC):
 
 
 class Assistant(AbstractAgent):
-    def __init__(self, instructions: str = "You are a helpful voice AI assistant.", session_id: str = None) -> None:
+    def __init__(self, instructions: str = "You are a helpful voice AI assistant.", session_id: str = None, ctx: Optional[agents.JobContext] = None) -> None:
         """Initialize the Assistant agent.
 
         Args:
             instructions: Base instructions for the agent's behavior
             session_id: Optional existing session ID for resuming a session
+            ctx: Optional job context for the agent session
         """
         super().__init__(instructions=instructions)
         self._session_id = session_id
@@ -97,6 +99,7 @@ class Assistant(AbstractAgent):
         self._participant_context: Optional[Dict] = None
         self._audio_processor = noise_cancellation.BVC()
         self._tools: List[Callable] = []
+        self._ctx = ctx  # Store the job context
 
         # Session monitoring
         self._call_duration_task: Optional[asyncio.Task] = None
@@ -112,6 +115,11 @@ class Assistant(AbstractAgent):
     def session_id(self) -> Optional[str]:
         """Get the current session ID"""
         return self._session_id
+        
+    @property
+    def ctx(self) -> Optional[agents.JobContext]:
+        """Get the job context"""
+        return self._ctx
 
     async def update_interaction_stage(self, stage: str) -> None:
         """Update and record the current interaction stage
@@ -134,6 +142,9 @@ class Assistant(AbstractAgent):
         Args:
             ctx: The job context containing room and connection information
         """
+        # Store the job context
+        self._ctx = ctx
+        
         # Establish connection
         await ctx.connect()
 
@@ -274,6 +285,7 @@ class Assistant(AbstractAgent):
 
         # Initialize processed configuration
         self._agent_config = AgentConfig(
+            ctx=self._ctx,
             stt_config=self._prepare_stt_config(raw_config),
             tts_config=self._prepare_tts_config(raw_config),
             llm_config=self._prepare_llm_config(raw_config),
@@ -480,7 +492,7 @@ class Assistant(AbstractAgent):
 
         # Start session
         await self._agent_session.start(
-            room=self._room_name,
+            room=self._ctx.room,
             agent=self,
             room_input_options=RoomInputOptions(
                 noise_cancellation=self._audio_processor,
@@ -610,8 +622,8 @@ async def entrypoint(ctx: agents.JobContext):
     """Entry point for the agent service"""
     assistant = None
     try:
-        # Create and initialize the assistant
-        assistant = Assistant()
+        # Create and initialize the assistant with the context
+        assistant = Assistant(ctx=ctx)
         await assistant.initialize(ctx)
 
         # Set up signal handlers for graceful shutdown
