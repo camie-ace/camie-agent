@@ -1,23 +1,24 @@
 """
-Utility to extract agent configuration IDs from room names and fetch configuration from API
+Utility to extract phone numbers from room names and fetch configuration from API
 """
 
 import os
 import re
 import jwt
+import json
 from typing import Dict, Any, Optional, Tuple
 from utils.api_client import APIClient
 
 
-async def extract_agent_conf_id_from_room_name(room_name: str) -> Optional[str]:
+async def extract_phone_from_room_name(room_name: str) -> Optional[str]:
     """
-    Extract an agent configuration ID from a LiveKit room name
+    Extract a phone number from a LiveKit room name
 
     Args:
         room_name: The LiveKit room name (format: "twilio-+12345678901-XXXXX")
 
     Returns:
-        Extracted agent configuration ID or None if not found
+        Extracted phone number or None if not found
     """
     if not room_name:
         return None
@@ -31,12 +32,12 @@ async def extract_agent_conf_id_from_room_name(room_name: str) -> Optional[str]:
     return None
 
 
-async def create_agent_conf_jwt(agent_conf_id: str, direction: str, room_name: str) -> str:
+async def create_phone_jwt(phone_number: str, direction: str, room_name: str) -> str:
     """
-    Create a JWT token for the agent configuration ID using environment variables
+    Create a JWT token for the phone number using environment variables
 
     Args:
-        agent_conf_id: The agent configuration ID to encode in the JWT
+        phone_number: The phone number to encode in the JWT
 
     Returns:
         JWT token string
@@ -47,7 +48,7 @@ async def create_agent_conf_jwt(agent_conf_id: str, direction: str, room_name: s
     if not jwt_secret:
         raise ValueError("JWT_SECRET not configured in environment variables")
 
-    payload = {"phone_number": agent_conf_id,
+    payload = {"phone_number": phone_number,
                direction: direction, "room_name": room_name}
     token = jwt.encode(payload, jwt_secret, algorithm=jwt_algorithm)
 
@@ -58,12 +59,12 @@ async def create_agent_conf_jwt(agent_conf_id: str, direction: str, room_name: s
     return token
 
 
-async def fetch_agent_config(agent_conf_id: str, call_direction: Optional[str] = None, room_name: Optional[str] = None) -> Tuple[Dict[str, Any], Optional[str]]:
+async def fetch_agent_config_by_phone(phone_number: str, call_direction: Optional[str] = None, room_name: Optional[str] = None) -> Tuple[Dict[str, Any], Optional[str]]:
     """
-    Fetch agent configuration from API using agent configuration ID
+    Fetch agent configuration from API using phone number
 
     Args:
-        agent_conf_id: The agent configuration ID to get configuration for
+        phone_number: The phone number to get configuration for
         call_direction: The call direction ("inbound" or "outbound") if known
         room_name: Optional room name for the call
 
@@ -71,7 +72,7 @@ async def fetch_agent_config(agent_conf_id: str, call_direction: Optional[str] =
         Tuple of (agent_config, extracted_direction) where extracted_direction is from the API response
         if call_direction wasn't provided
     """
-    token = await create_agent_conf_jwt(agent_conf_id, call_direction, room_name)
+    token = await create_phone_jwt(phone_number, call_direction, room_name)
     config_url = os.getenv("VOICE_CONFIG_TOKEN_URL")
 
     if not config_url:
@@ -90,7 +91,7 @@ async def fetch_agent_config(agent_conf_id: str, call_direction: Optional[str] =
         params = params if params else None
 
         print(
-            f"Fetching agent config for ID: {agent_conf_id}, direction: {call_direction or 'inbound'}, room: {room_name or 'n/a'}")
+            f"Fetching agent config for phone: {phone_number}, direction: {call_direction or 'inbound'}, room: {room_name or 'n/a'}")
         result = await client._make_request("GET", config_url, headers=headers, params=params)
 
         if result.get("error") or result.get("responseCode") != "00":
@@ -99,36 +100,35 @@ async def fetch_agent_config(agent_conf_id: str, call_direction: Optional[str] =
             print(f"Error fetching configuration: {error_message}")
             return {}, None
 
-        # Extract the agent config from the data field containing the agent configuration ID
+        # Extract the phone config from the data field containing the phone number object
         data = result.get("data", {})
 
         # Look for the phone number in the data
         # The phone number might be with or without a plus, so check both formats
-        agent_config = data.get("phone_number", None)
-        if agent_config is None and agent_conf_id.startswith('+'):
+        phone_config = data.get(phone_number, None)
+        if phone_config is None and phone_number.startswith('+'):
             # Try without the plus
-            agent_config = data.get(agent_conf_id[1:], None)
-        if agent_config is None and not agent_conf_id.startswith('+'):
+            phone_config = data.get(phone_number[1:], None)
+        if phone_config is None and not phone_number.startswith('+'):
             # Try with the plus
-            agent_config = data.get(f"+{agent_conf_id}", None)
+            phone_config = data.get(f"+{phone_number}", None)
 
-        if not agent_config:
-            print(
-                f"No configuration found for agent configuration ID: {agent_conf_id}")
+        if not phone_config:
+            print(f"No configuration found for phone number: {phone_number}")
             return {}, None
 
         # If call_direction is provided, use it to get the specific config
-        if call_direction and call_direction in agent_config:
-            return agent_config[call_direction], call_direction
+        if call_direction and call_direction in phone_config:
+            return phone_config[call_direction], call_direction
 
         # If not provided, try to determine from available keys
-        if "inbound" in agent_config:
-            return agent_config["inbound"], "inbound"
-        elif "outbound" in agent_config:
-            return agent_config["outbound"], "outbound"
+        if "inbound" in phone_config:
+            return phone_config["inbound"], "inbound"
+        elif "outbound" in phone_config:
+            return phone_config["outbound"], "outbound"
 
-        # If we can't determine, return the whole agent_config
-        return agent_config, None
+        # If we can't determine, return the whole phone_config
+        return phone_config, None
 
 
 async def get_agent_config_from_room(room_name: str, participant_metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
@@ -142,17 +142,16 @@ async def get_agent_config_from_room(room_name: str, participant_metadata: Optio
     Returns:
         Agent configuration dictionary
     """
-    agent_conf_id = await extract_agent_conf_id_from_room_name(room_name)
+    phone_number = await extract_phone_from_room_name(room_name)
 
-    if not agent_conf_id:
-        print(
-            f"Could not extract agent configuration ID from room name: {room_name}")
+    if not phone_number:
+        print(f"Could not extract phone number from room name: {room_name}")
         return {}
 
     # Extract call direction from metadata if available
     call_direction = None
     if participant_metadata and isinstance(participant_metadata, dict):
-        call_direction = participant_metadata.get("call_type")
+        call_direction = participant_metadata.get("direction")
         if call_direction:
             print(f"Using call direction from metadata: {call_direction}")
         else:
@@ -160,11 +159,11 @@ async def get_agent_config_from_room(room_name: str, participant_metadata: Optio
             call_direction = "inbound"
 
     try:
-        config, detected_direction = await fetch_agent_config(agent_conf_id, call_direction, room_name)
+        config, detected_direction = await fetch_agent_config_by_phone(phone_number, call_direction, room_name)
 
         if not config:
             print(
-                f"No configuration found for agent configuration ID: {agent_conf_id}, direction: {call_direction}")
+                f"No configuration found for phone: {phone_number}, direction: {call_direction}")
             return {}
 
         if detected_direction and call_direction and detected_direction != call_direction:
