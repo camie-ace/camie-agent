@@ -104,7 +104,9 @@ class Assistant(AbstractAgent):
         # Session monitoring
         self._call_duration_task: Optional[asyncio.Task] = None
         self._silence_monitor_task: Optional[asyncio.Task] = None
-        self._last_voice_activity_time = asyncio.Event()  # For silence detection
+        self._last_voice_activity_time = asyncio.Event()
+        self._voice_activity_detection_control = None
+        self._interruption_sensitivity_control = None
 
     @property
     def interaction_stage(self) -> str:
@@ -115,7 +117,7 @@ class Assistant(AbstractAgent):
     def session_id(self) -> Optional[str]:
         """Get the current session ID"""
         return self._session_id
-        
+
     @property
     def ctx(self) -> Optional[agents.JobContext]:
         """Get the job context"""
@@ -144,7 +146,7 @@ class Assistant(AbstractAgent):
         """
         # Store the job context
         self._ctx = ctx
-        
+
         # Establish connection
         await ctx.connect()
 
@@ -250,12 +252,13 @@ class Assistant(AbstractAgent):
             # Skip recording if opt_out_sensitive_data is True
             if raw_config.get("opt_out_sensitive_data", False):
                 logger.info(
-                    f"Call recording disabled due to opt_out_sensitive_data setting")
+                    f"Call recording disabled due to compliance settings: {raw_config.get('opt_out_sensitive_data')}")
+                logger.info("No call history or sensitive data will be recorded for this session")
                 return None
 
             # Proceed with recording since opt_out_sensitive_data is False or not set
             session_id = await start_call_recording(
-                agent_conf_id=config_id,
+                phone_number=config_id,
                 room_name=self._room_name,
                 call_type=interaction_type
             )
@@ -276,12 +279,20 @@ class Assistant(AbstractAgent):
         )
 
         # Update session with configuration if recording is enabled
+        # Only update call config if recording is active (session_id exists)
         if self._session_id:
             await update_call_config(self._session_id, raw_config)
+            logger.info(f"Updated call configuration for recorded session: {self._session_id}")
+        else:
+            logger.info("Skipping call config update - recording disabled due to privacy settings")
 
         logger.info("Agent configuration loaded", extra={
             "config": raw_config
         })
+
+        if (raw_config):
+            self._voice_activity_detection_control = raw_config.get(
+                'voice_activity_detection_control', 0.20)
 
         # Initialize processed configuration
         self._agent_config = AgentConfig(
@@ -485,8 +496,9 @@ class Assistant(AbstractAgent):
             stt=stt,
             llm=llm,
             tts=tts,
-            vad=silero.VAD.load(min_silence_duration=0.20),
-            turn_detection=MultilingualModel(),
+            vad=silero.VAD.load(
+                min_silence_duration=self._voice_activity_detection_control or 0.20),
+            # turn_detection=MultilingualModel(),
             allow_interruptions=True,
         )
 
@@ -527,15 +539,21 @@ class Assistant(AbstractAgent):
             await asyncio.sleep(max_duration_seconds)
 
             if self._agent_session:
+                logger.info(
+                    "Call duration limit reached - sending farewell message")
                 # Inform user that call duration limit reached
                 await self._agent_session.generate_reply(
-                    instructions="Inform the user that the maximum call duration has been reached and say goodbye politely."
+                    instructions="Inform the user that the maximum call duration has been reached and say goodbye politely.",
+                    allow_interruptions=False
                 )
 
-                # Allow time for the goodbye message
-                await asyncio.sleep(5)
+                # Allow time for the goodbye message to be spoken and heard
+                logger.info("Waiting for farewell message to complete")
+                # Increased time to ensure message is fully delivered
+                await asyncio.sleep(8)
 
                 # End the call
+                logger.info("Ending call due to maximum duration exceeded")
                 await self.end_session("max_duration_exceeded")
 
         except asyncio.CancelledError:
@@ -567,15 +585,21 @@ class Assistant(AbstractAgent):
                 except asyncio.TimeoutError:
                     # No voice activity detected within timeout period
                     if self._agent_session:
+                        logger.info(
+                            "Silence timeout reached - sending farewell message")
                         # Inform user about silence timeout
                         await self._agent_session.generate_reply(
-                            instructions="Inform the user that due to lack of activity, you need to end the call, and say goodbye politely."
+                            instructions="Inform the user that due to lack of activity, you need to end the call, and say goodbye politely.",
+                            allow_interruptions=False
                         )
 
-                        # Allow time for the goodbye message
-                        await asyncio.sleep(5)
+                        # Allow time for the goodbye message to be spoken and heard
+                        logger.info("Waiting for farewell message to complete")
+                        # Increased time to ensure message is fully delivered
+                        await asyncio.sleep(8)
 
                         # End the call
+                        logger.info("Ending call due to silence timeout")
                         await self.end_session("silence_timeout")
                         break
 
@@ -585,37 +609,77 @@ class Assistant(AbstractAgent):
             logger.exception(f"Error in silence monitor: {str(e)}")
 
     async def end_session(self, reason: str = None) -> None:
-        """End the agent session"""
+        """End the agent session and terminate the call completely"""
+        logger.info(f"Ending session with reason: {reason}")
+
         # Cancel monitoring tasks
         if self._call_duration_task and not self._call_duration_task.done():
             self._call_duration_task.cancel()
+            logger.info("Cancelled call duration monitoring task")
 
         if self._silence_monitor_task and not self._silence_monitor_task.done():
             self._silence_monitor_task.cancel()
+            logger.info("Cancelled silence monitoring task")
 
         # Stop the agent session
         if self._agent_session:
-            await self._agent_session
+            logger.info("Stopping agent session")
+            await self._agent_session.aclose()
+            self._agent_session = None
 
         # Record the call ending if recording was enabled
         if self._session_id:
-            if reason:
-                await end_call_recording(
-                    call_id=self._session_id,
-                    status="dropped",
-                    reason=reason
-                )
-            else:
-                await end_call_recording(
-                    call_id=self._session_id,
-                    status="completed",
-                    outcomes={
-                        "final_stage": self._interaction_stage,
-                        "successful": True
-                    }
-                )
+            logger.info(
+                f"Recording call completion for session: {self._session_id}")
+            try:
+                if reason:
+                    await end_call_recording(
+                        call_id=self._session_id,
+                        status="dropped",
+                        reason=reason
+                    )
+                else:
+                    await end_call_recording(
+                        call_id=self._session_id,
+                        status="completed",
+                        outcomes={
+                            "final_stage": self._interaction_stage,
+                            "successful": True
+                        }
+                    )
+                logger.info("Call recording completed successfully")
+            except Exception as e:
+                logger.error(f"Error finalizing call recording: {str(e)}")
         else:
-            logger.info("Session ended (no recording to finalize)")
+            logger.info("Session ended (no recording to finalize - disabled due to compliance settings)")
+
+        # Terminate the call by disconnecting from the room
+        await self._terminate_call(reason)
+
+    async def _terminate_call(self, reason: str = None) -> None:
+        """Terminate the call by disconnecting from the room and cleaning up resources"""
+        try:
+            if self._ctx and self._ctx.room:
+                logger.info(
+                    f"Terminating call - disconnecting from room: {self._room_name}")
+
+                # Disconnect the local participant from the room
+                await self._ctx.room.disconnect()
+                logger.info("Successfully disconnected from room")
+
+                # Optional: Add a small delay to ensure cleanup completes
+                await asyncio.sleep(1)
+
+            else:
+                logger.warning(
+                    "No room context available for call termination")
+
+        except Exception as e:
+            logger.error(f"Error during call termination: {str(e)}")
+            # Continue with cleanup even if room disconnection fails
+
+        logger.info(
+            f"Call terminated successfully. Reason: {reason or 'normal completion'}")
 
 
 async def entrypoint(ctx: agents.JobContext):
