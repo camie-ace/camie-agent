@@ -156,7 +156,7 @@ class ModelFactory:
         Returns:
             A TTS instance from the specified provider
         """
-        provider = config.get("provider", "").lower()
+        provider = config.get("provider", "Cartesia").lower()
 
         if not provider:
             logger.warning(
