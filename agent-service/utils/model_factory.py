@@ -156,7 +156,13 @@ class ModelFactory:
         Returns:
             A TTS instance from the specified provider
         """
-        provider = config.get("provider", "Cartesia").lower()
+        provider = config.get("provider", "cartesia")
+
+        # Handle None case and convert to lowercase
+        if provider is None:
+            provider = "cartesia"
+        else:
+            provider = provider.lower()
 
         if not provider:
             logger.warning(
@@ -198,7 +204,8 @@ class ModelFactory:
             else:
                 return elevenlabs.TTS(model=model, language=language, voice_id=voice_id)
         elif provider == "cartesia":
-            model = config.get("model", TTSConfig.CARTESIA_DEFAULT_FR.value["model"])
+            model = config.get(
+                "model", TTSConfig.CARTESIA_DEFAULT_FR.value["model"])
             voice = config.get(
                 "voice", TTSConfig.CARTESIA_DEFAULT_FR.value["voice"])
 
