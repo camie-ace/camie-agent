@@ -204,10 +204,13 @@ class ModelFactory:
             else:
                 return elevenlabs.TTS(model=model, language=language, voice_id=voice_id)
         elif provider == "cartesia":
-            model = config.get(
-                "model", TTSConfig.CARTESIA_DEFAULT_FR.value["model"])
+            model = config.get("model", "sonic-2")
             voice = config.get(
-                "voice", TTSConfig.CARTESIA_DEFAULT_FR.value["voice"])
+                "voice") or TTSConfig.CARTESIA_DEFAULT_FR.value["voice"]
+
+            # Ensure voice is not None
+            if voice is None:
+                voice = TTSConfig.CARTESIA_DEFAULT_FR.value["voice"]
 
             # Build kwargs dictionary with only defined optional parameters
             kwargs = {}
@@ -221,8 +224,11 @@ class ModelFactory:
         else:
             logger.warning(
                 f"Unsupported TTS provider: {provider}, defaulting to cartesia")
-            # Use default model and voice_id without any voice settings
-            return cartesia.TTS(model=TTSConfig.CARTESIA_DEFAULT_FR.value["model"], language=TTSConfig.CARTESIA_DEFAULT_FR.value["language"], voice=TTSConfig.CARTESIA_DEFAULT_FR.value["voice"])
+            # Use default model and voice without any voice settings
+            return cartesia.TTS(
+                model="sonic-2",
+                voice=TTSConfig.CARTESIA_DEFAULT_FR.value["voice"]
+            )
 
 
 def create_model_components(config: Dict[str, Any]):
