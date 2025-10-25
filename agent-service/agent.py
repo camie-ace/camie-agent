@@ -310,7 +310,7 @@ class Assistant(AbstractAgent):
             ),
             welcome_type=raw_config.get(
                 "welcome_message_type",
-                "user_initiates"
+                "human_initiates"
             ),
             end_call_on_silence=raw_config.get("end_call_on_silence", False),
             silence_duration=raw_config.get("silence_duration", 60),
@@ -521,10 +521,18 @@ class Assistant(AbstractAgent):
         if self._agent_config.end_call_on_silence:
             self._agent_session.on("voice_activity")(on_voice_activity)
 
-        # Generate welcome message
-        await self._agent_session.generate_reply(
-            instructions=f"Greet the user with: {self._agent_config.welcome_message}"
-        )
+        # Handle welcome message based on welcome_message_type
+        if self._agent_config.welcome_type == "ai_initiates":
+            # AI initiates with dynamic response
+            await self._agent_session.generate_reply(
+                instructions="Greet the user naturally and ask how you can help them today."
+            )
+        elif self._agent_config.welcome_type == "ai_static":
+            # AI initiates with static message
+            await self._agent_session.generate_reply(
+                instructions=f"Greet the user with exactly this message: {self._agent_config.welcome_message}"
+            )
+        # For "human_initiates", we don't send any welcome message and wait for the user to speak first
 
     async def _monitor_call_duration(self, max_duration_seconds: int) -> None:
         """
