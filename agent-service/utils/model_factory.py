@@ -180,29 +180,26 @@ class ModelFactory:
             style = config.get("style")
             speed = config.get("speed")
 
-            # Create VoiceSettings instance with only defined parameters
-            voice_settings_kwargs = {}
-            if stability is not None:
-                voice_settings_kwargs["stability"] = stability
-            if similarity_boost is not None:
-                voice_settings_kwargs["similarity_boost"] = similarity_boost
+            # Create VoiceSettings instance with default values for required parameters
+            voice_settings_kwargs = {
+                "similarity_boost": similarity_boost if similarity_boost is not None else 0.75,
+                "stability": stability if stability is not None else 0.5
+            }
+
+            # Add optional parameters if provided
             if style is not None:
                 voice_settings_kwargs["style"] = style
             if speed is not None:
                 voice_settings_kwargs["speed"] = speed
 
-            # Create VoiceSettings instance if any settings are specified
-            voice_settings = VoiceSettings(
-                **voice_settings_kwargs) if voice_settings_kwargs else None
+            # Create VoiceSettings instance with defaults
+            voice_settings = VoiceSettings(**voice_settings_kwargs)
 
             logger.info(
                 f"Creating ElevenLabs TTS with model={model}, voice_id={voice_id}, language={language}, voice_settings={voice_settings_kwargs}")
 
-            # Pass voice_settings as an instance or None
-            if voice_settings:
-                return elevenlabs.TTS(model=model, language=language, voice_id=voice_id, voice_settings=voice_settings)
-            else:
-                return elevenlabs.TTS(model=model, language=language, voice_id=voice_id)
+            # Always pass voice_settings since we always create it with defaults
+            return elevenlabs.TTS(model=model, language=language, voice_id=voice_id, voice_settings=voice_settings)
         elif provider == "cartesia":
             model = config.get("model", "sonic-2")
             voice = config.get(
