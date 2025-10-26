@@ -170,8 +170,8 @@ class ModelFactory:
             provider = "elevenlabs"
 
         if provider == "elevenlabs":
-            model = config.get("model", "eleven_turbo_v2_5")
-            voice_id = config.get("voice", "29vD33N1CtxCmqQRPOHJ")
+            model = config.get("model", "eleven_multilingual_v2")
+            voice_id = config.get("voice", "2EiwWnXFnvU5JabPnv8n")
             language = config.get("language", "en")
 
             # Extract voice settings parameters
@@ -225,7 +225,7 @@ class ModelFactory:
             return elevenlabs.TTS(
                 model="eleven_multilingual_v2",
                 language="fr",
-                voice_id="29vD33N1CtxCmqQRPOHJ"
+                voice_id="2EiwWnXFnvU5JabPnv8n"
             )
 
 
