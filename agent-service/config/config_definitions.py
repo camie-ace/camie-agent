@@ -31,7 +31,7 @@ class TTSConfig(Enum):
 DEFAULT_SETTINGS = {
     "stt_config_key": "DEEPGRAM_NOVA2_FR",
     "llm_config_key": "OPENAI_GPT4O_MINI",
-    "tts_config_key": "CARTESIA_DEFAULT_FR",
+    "tts_config_key": "ELEVENLABS_UNKNOWN_FR",
     "stt_model_override": None, "stt_language_override": None,
     "llm_model_override": None, "llm_temperature_override": None,
     "tts_model_override": None, "tts_language_override": None, "tts_voice_override": None,
