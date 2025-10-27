@@ -167,7 +167,7 @@ class ModelFactory:
         if not provider:
             logger.warning(
                 "No TTS provider specified, defaulting to elevenlabs")
-            provider = "elevenlabs"
+            provider = "cartesia"
 
         if provider == "elevenlabs":
             model = config.get("model", "eleven_multilingual_v2")
@@ -222,10 +222,10 @@ class ModelFactory:
             logger.warning(
                 f"Unsupported TTS provider: {provider}, defaulting to elevenlabs")
             # Use default ElevenLabs configuration
-            return elevenlabs.TTS(
-                model="eleven_multilingual_v2",
-                language="fr",
-                voice_id="2EiwWnXFnvU5JabPnv8n"
+            return cartesia.TTS(
+                model="sonic-2",
+                language="en",
+                voice_id="5c3c89e5-535f-43ef-b14d-f8ffe148c1f0"
             )
 
 
