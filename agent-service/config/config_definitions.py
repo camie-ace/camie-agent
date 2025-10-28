@@ -18,10 +18,10 @@ class LLMConfig(Enum):
 
 
 class TTSConfig(Enum):
-    CARTESIA_DEFAULT_EN = {"provider": "cartesia", "model": None,
-                           "language": "en", "voice":  "c99d36f3-5ffd-4253-803a-535c1bc9c306"}
+    CARTESIA_DEFAULT_EN = {"provider": "cartesia", "model": "sonic-2",
+                           "language": "en", "voice":  "228fca29-3a0a-435c-8728-5cb483251068"}
     CARTESIA_DEFAULT_FR = {"provider": "cartesia", "model": "sonic-2",
-                           "language": "en", "voice":  "5c3c89e5-535f-43ef-b14d-f8ffe148c1f0"}
+                           "language": "en", "voice":  "228fca29-3a0a-435c-8728-5cb483251068"}
     ELEVENLABS_UNKNOWN_FR = {"provider": "elevenlabs", "model": "eleven_multilingual_v2",
                              "language": "en", "voice": "2EiwWnXFnvU5JabPnv8n"}
     OPENAI_ALLOY_TTS = {"provider": "openai_tts",
