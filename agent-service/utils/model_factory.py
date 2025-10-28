@@ -156,11 +156,11 @@ class ModelFactory:
         Returns:
             A TTS instance from the specified provider
         """
-        provider = config.get("provider", "elevenlabs")
+        provider = config.get("provider", "cartesia")
 
         # Handle None case and convert to lowercase
         if provider is None:
-            provider = "elevenlabs"
+            provider = "cartesia"
         else:
             provider = provider.lower()
 
