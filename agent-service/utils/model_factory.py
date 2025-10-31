@@ -156,18 +156,12 @@ class ModelFactory:
         Returns:
             A TTS instance from the specified provider
         """
+        
         provider = config.get("provider", "cartesia")
 
-        # Handle None case and convert to lowercase
-        if provider is None:
-            provider = "cartesia"
-        else:
-            provider = provider.lower()
+        provider = provider.lower() if provider else "cartesia"
 
-        if not provider:
-            logger.warning(
-                "No TTS provider specified, defaulting to elevenlabs")
-            provider = "elevenlabs"
+        logger.info(f"Using TTS provider: {provider}")
 
         if provider == "elevenlabs":
             model = config.get("model", "eleven_multilingual_v2")
