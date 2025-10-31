@@ -319,33 +319,63 @@ class Assistant(AbstractAgent):
         )
 
     def _prepare_stt_config(self, config: Dict) -> Dict:
-        """Prepare STT configuration"""
+        """Prepare STT configuration
+
+        Args:
+            config: Raw configuration dictionary from the config service
+
+        Returns:
+            Dict containing structured STT configuration
+        """
         stt_config = {
             "provider": config.get("transcription_provider", "deepgram"),
+            "model": config.get("transcription_provider_model", "nova-2"),
             "language": config.get("agent_language", "en-US")
         }
         logger.info(f"Using STT provider: {stt_config['provider']}")
         return stt_config
 
     def _prepare_tts_config(self, config: Dict) -> Dict:
-        """Prepare TTS configuration"""
+        """Prepare TTS configuration
+
+        Args:
+            config: Raw configuration dictionary from the config service
+
+        Returns:
+            Dict containing structured TTS configuration
+        """
         tts_config = {
-            "provider": config.get("voice_provider", None),
-            "voice": config.get("voice", None),
+            "provider": config.get("voice_provider", "cartesia"),
+            "model": config.get("voice_provider_model", "sonic-2"),
+            "voice": config.get("voice"),
             "custom_voice_id": config.get("custom_voice_id"),
-            "speed": config.get("voice_speed", 1),
-            "stability": config.get("stability", 75),
-            "clarity_similarity": config.get("clarity_similarity", 80),
-            "voice_improvement": config.get("voice_improvement", True),
-            "language": config.get("agent_language", None)
+            "speed": float(config.get("voice_speed", 1)),
+            "stability": int(config.get("stability", 75)),
+            "clarity_similarity": int(config.get("clarity_similarity", 85)),
+            "voice_improvement": bool(config.get("voice_improvement", True)),
+            "language": config.get("agent_language", "en-US")
         }
         logger.info(
             f"Using TTS provider: {tts_config['provider']} with voice: {tts_config['voice']}")
         return tts_config
 
     def _prepare_llm_config(self, config: Dict) -> Dict:
-        """Prepare LLM configuration"""
-        return {}
+        """Prepare LLM configuration
+
+        Args:
+            config: Raw configuration dictionary from the config service
+
+        Returns:
+            Dict containing structured LLM configuration
+        """
+        llm_config = {
+            "provider": config.get("llm", "openai"),
+            "model": config.get("llm_model", "gpt-4"),
+            "temperature": 0.7  # Default temperature if not specified
+        }
+        
+        logger.info(f"Using LLM provider: {llm_config['provider']} with model: {llm_config['model']}")
+        return llm_config
 
     def _prepare_tool_configs(self, tools_config: Dict[str, Any]) -> Dict[str, ToolConfig]:
         """
@@ -497,7 +527,7 @@ class Assistant(AbstractAgent):
             llm=llm,
             tts=tts,
             vad=silero.VAD.load(
-                min_silence_duration=self._voice_activity_detection_control or 0.20),
+                min_silence_duration=self._voice_activity_detection_control or 0.05),
             # turn_detection=MultilingualModel(),
             allow_interruptions=True,
         )
