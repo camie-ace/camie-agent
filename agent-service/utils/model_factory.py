@@ -156,7 +156,7 @@ class ModelFactory:
         Returns:
             A TTS instance from the specified provider
         """
-        
+
         provider = config.get("provider", "cartesia")
 
         provider = provider.lower() if provider else "cartesia"
@@ -165,7 +165,7 @@ class ModelFactory:
 
         if provider == "elevenlabs":
             model = config.get("model", "eleven_multilingual_v2")
-            voice_id = config.get("voice", "2EiwWnXFnvU5JabPnv8n")
+            voice_id = config.get("voice", "ODq5zmih8GrVes37Dizd")
             language = config.get("language", "en")
 
             # Extract voice settings parameters

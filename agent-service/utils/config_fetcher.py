@@ -59,7 +59,7 @@ async def create_phone_jwt(phone_number: str, direction: str, room_name: str) ->
     return token
 
 
-async def fetch_agent_config_by_phone(phone_number: str, call_direction: Optional[str] = None, room_name: Optional[str] = None) -> Tuple[Dict[str, Any], Optional[str]]:
+async def fetch_agent_config_by_phone(phone_number: str, call_direction: Optional[str] = None, room_name: Optional[str] = None, conf_id: Optional[str] = None) -> Tuple[Dict[str, Any], Optional[str]]:
     """
     Fetch agent configuration from API using phone number
 
@@ -86,6 +86,8 @@ async def fetch_agent_config_by_phone(phone_number: str, call_direction: Optiona
             params["direction"] = call_direction
         if room_name:
             params["room_name"] = room_name
+        if conf_id:
+            params["configuration_id"] = conf_id
 
         # Only pass params if we have any
         params = params if params else None
@@ -146,6 +148,23 @@ async def get_agent_config_from_room(room_name: str, participant_metadata: Optio
 
     if not phone_number:
         print(f"Could not extract phone number from room name: {room_name}")
+        # Check for conf_id in participant_metadata
+        if participant_metadata and isinstance(participant_metadata, dict):
+            conf_id = participant_metadata.get("conf_id")
+            direction = participant_metadata.get("direction")
+            if conf_id:
+                print(
+                    f"Found conf_id in metadata: {conf_id}, using it to fetch config")
+                try:
+                    config, detected_direction = await fetch_agent_config_by_phone(
+                        phone_number=None,
+                        call_direction=direction,
+                        room_name=room_name,
+                        conf_id=conf_id
+                    )
+                    return config
+                except Exception as e:
+                    print(f"Error getting agent config with conf_id: {e}")
         return {}
 
     # Extract call direction from metadata if available
