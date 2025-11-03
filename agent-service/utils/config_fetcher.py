@@ -93,8 +93,9 @@ async def fetch_agent_config_by_phone(phone_number: str, call_direction: Optiona
         params = params if params else None
 
         print(
-            f"Fetching agent config for phone: {phone_number}, direction: {call_direction or 'inbound'}, room: {room_name or 'n/a'}")
+            f"Fetching agent config for phone: {phone_number}, direction: {call_direction or 'inbound'}, room: {room_name or 'n/a'}, url: {config_url}, params: {params}")
         result = await client._make_request("GET", config_url, headers=headers, params=params)
+        print(f"API Response: {result}")
 
         if result.get("error") or result.get("responseCode") != "00":
             error_message = result.get("message") or result.get(
@@ -156,8 +157,9 @@ async def get_agent_config_from_room(room_name: str, participant_metadata: Optio
                 print(
                     f"Found conf_id in metadata: {conf_id}, using it to fetch config")
                 try:
+                    # Use a default phone number since it's required for JWT
                     config, detected_direction = await fetch_agent_config_by_phone(
-                        phone_number=None,
+                        phone_number="unknown",
                         call_direction=direction,
                         room_name=room_name,
                         conf_id=conf_id
