@@ -103,35 +103,29 @@ async def fetch_agent_config_by_phone(phone_number: str, call_direction: Optiona
             print(f"Error fetching configuration: {error_message}")
             return {}, None
 
-        # Extract the phone config from the data field containing the phone number object
+        # Extract the phone config from the data field
         data = result.get("data", {})
+        phone_data = data.get("phone_number", {})
 
-        # Look for the phone number in the data
-        # The phone number might be with or without a plus, so check both formats
-        phone_config = data.get(phone_number, None)
-        if phone_config is None and phone_number.startswith('+'):
-            # Try without the plus
-            phone_config = data.get(phone_number[1:], None)
-        if phone_config is None and not phone_number.startswith('+'):
-            # Try with the plus
-            phone_config = data.get(f"+{phone_number}", None)
-
-        if not phone_config:
+        if not phone_data:
             print(f"No configuration found for phone number: {phone_number}")
             return {}, None
 
-        # If call_direction is provided, use it to get the specific config
-        if call_direction and call_direction in phone_config:
-            return phone_config[call_direction], call_direction
+        # If direction is provided, use it to get the specific config
+        if call_direction and call_direction in phone_data:
+            print(f"Using {call_direction} configuration")
+            return phone_data[call_direction], call_direction
 
         # If not provided, try to determine from available keys
-        if "inbound" in phone_config:
-            return phone_config["inbound"], "inbound"
-        elif "outbound" in phone_config:
-            return phone_config["outbound"], "outbound"
+        if "inbound" in phone_data:
+            print("Using inbound configuration")
+            return phone_data["inbound"], "inbound"
+        elif "outbound" in phone_data:
+            print("Using outbound configuration")
+            return phone_data["outbound"], "outbound"
 
-        # If we can't determine, return the whole phone_config
-        return phone_config, None
+        print(f"No valid configuration found for phone: {phone_number}")
+        return {}, None
 
 
 async def get_agent_config_from_room(room_name: str, participant_metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
@@ -182,20 +176,19 @@ async def get_agent_config_from_room(room_name: str, participant_metadata: Optio
     try:
         config, detected_direction = await fetch_agent_config_by_phone(phone_number, call_direction, room_name)
 
-        if not config:
-            print(
-                f"No configuration found for phone: {phone_number}, direction: {call_direction}")
-            return {}
-
         if detected_direction and call_direction and detected_direction != call_direction:
             print(
                 f"Warning: Detected direction ({detected_direction}) differs from metadata direction ({call_direction})")
 
-        # Log the configuration keys we've received to help with debugging
-        config_keys = list(config.keys())
-        print(f"Received configuration with keys: {config_keys}")
-
-        return config
+        if config:
+            # Log the configuration keys we've received to help with debugging
+            config_keys = list(config.keys())
+            print(f"Received configuration with keys: {config_keys}")
+            return config
+        else:
+            print(
+                f"No configuration found for phone: {phone_number}, direction: {call_direction}")
+            return {}
     except Exception as e:
         print(f"Error getting agent config: {e}")
         return {}
