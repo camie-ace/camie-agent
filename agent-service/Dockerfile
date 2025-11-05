@@ -12,7 +12,7 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # Add the directory where uv is installed to the PATH
 # This path is where the install script places the binary
-ENV PATH="/root/.cargo/bin:$PATH"
+ENV PATH="/root/.local/bin:$PATH"
 
 WORKDIR /app
 
