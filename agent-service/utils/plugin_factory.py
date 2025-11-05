@@ -5,18 +5,19 @@ from typing import Any, Dict, Type, Optional
 # Import commonly used plugins directly
 from livekit.plugins import openai, cartesia, deepgram, elevenlabs
 
-from config.config_definitions import STTConfig, LLMConfig, TTSConfig, DEFAULT_SETTINGS
+from config.config_definitions import STTConfig, LLMConfig, TTSConfig
 
 # Plugin provider mappings - maps provider names to their module and class
 PLUGIN_MAPPINGS = {
     # STT Plugins
     "deepgram": {"module": "livekit.plugins.deepgram", "class_name": "STT"},
+    "mistral": {"module": "livekit.plugins.mistral", "class_name": "STT"},
     "elevenlabs_stt": {"module": "livekit.plugins.elevenlabs", "class_name": "STT"},
 
     # LLM Plugins
     "openai": {"module": "livekit.plugins.openai", "class_name": "LLM"},
-    # Example
     "anthropic": {"module": "livekit.plugins.anthropic", "class_name": "LLM"},
+    "mistral_llm": {"module": "livekit.plugins.mistralai", "class_name": "LLM"},
 
     # TTS Plugins
     "cartesia": {"module": "livekit.plugins.cartesia", "class_name": "TTS"},
@@ -112,26 +113,18 @@ def _instantiate_configured_plugin(
 
 
 def create_stt_plugin(user_settings: Dict[str, Any]):
-    config_key_str = user_settings.get(
-        "stt_config_key", DEFAULT_SETTINGS["stt_config_key"])
-    try:
-        base_config = STTConfig[config_key_str].value
-    except KeyError:
-        print(
-            f"Warning: Invalid STT config key '{config_key_str}'. Falling back to default.")
-        base_config = STTConfig[DEFAULT_SETTINGS["stt_config_key"]].value
-
-    final_config = _apply_overrides_to_config(
-        base_config, user_settings, "stt")
-    provider = final_config["provider"]
+    provider = user_settings["provider"]
 
     # Define parameter mappings based on provider
     if provider == "deepgram":
         param_mapping = {"model": "model", "language": "language"}
         api_key = "DEEPGRAM_API_KEY"
-    elif provider == "elevenlabs_stt":
+    elif provider == "elevenlabs_stt" or "elevenlabs" in provider:
         param_mapping = {"model": "model_id", "language": "language_code"}
         api_key = "ELEVEN_API_KEY"
+    elif provider == "mistral":
+        param_mapping = {"model": "model", "language": "language"}
+        api_key = "MISTRAL_API_KEY"
     else:
         print(
             f"Warning: Unsupported STT provider '{provider}'. Falling back to default Deepgram.")
@@ -143,7 +136,7 @@ def create_stt_plugin(user_settings: Dict[str, Any]):
     plugin = _instantiate_configured_plugin(
         provider=provider,
         api_key_env_var=api_key,
-        config_params=final_config,
+        config_params=user_settings,
         provider_param_mapping=param_mapping
     )
 
@@ -152,44 +145,40 @@ def create_stt_plugin(user_settings: Dict[str, Any]):
         print(
             f"Failed to instantiate STT plugin for provider '{provider}'. Using fallback.")
         # Use stable French model to avoid Deepgram auto-fallback warnings
-        fallback_config = STTConfig.DEEPGRAM_NOVA2_FR.value
-        return deepgram.STT(model=fallback_config["model"], language=fallback_config["language"])
+        return deepgram.STT(model="nova-2", language="fr")
 
     return plugin
 
 
 def create_llm_plugin(user_settings: Dict[str, Any]):
-    config_key_str = user_settings.get(
-        "llm_config_key", DEFAULT_SETTINGS["llm_config_key"])
-    try:
-        base_config = LLMConfig[config_key_str].value
-    except KeyError:
-        print(
-            f"Warning: Invalid LLM config key '{config_key_str}'. Falling back to default.")
-        base_config = LLMConfig[DEFAULT_SETTINGS["llm_config_key"]].value
+    base_config = {
+        "provider": user_settings.get('llm', 'openai'),
+        "model": user_settings.get('llm_model', 'gpt-4o-mini')
+    }
 
-    final_config = _apply_overrides_to_config(
-        base_config, user_settings, "llm")
-    provider = final_config["provider"]
+    provider = base_config["provider"]
 
     # Define parameter mappings based on provider
     if provider == "openai":
         param_mapping = {"model": "model", "temperature": "temperature"}
         api_key = "OPENAI_API_KEY"
     elif provider == "anthropic":
-        param_mapping = {"model": "model_name", "temperature": "temperature"}
+        param_mapping = {"model": "model", "temperature": "temperature"}
         api_key = "ANTHROPIC_API_KEY"
+    elif provider == "mistral_llm" or "mistral" in provider:
+        param_mapping = {"model": "model", "temperature": "temperature"}
+        api_key = "MISTRAL_API_KEY"
     else:
         print(
             f"Warning: Unsupported LLM provider '{provider}'. Falling back to default OpenAI.")
         fallback_config = LLMConfig.OPENAI_GPT4O_MINI.value
-        return openai.LLM(model=fallback_config["model"], temperature=fallback_config.get("temperature"))
+        return openai.LLM(model=fallback_config["model"], temperature=fallback_config.get("temperature", 0))
 
     # Try to instantiate the configured plugin
     plugin = _instantiate_configured_plugin(
         provider=provider,
         api_key_env_var=api_key,
-        config_params=final_config,
+        config_params=base_config,
         provider_param_mapping=param_mapping
     )
 
@@ -203,19 +192,34 @@ def create_llm_plugin(user_settings: Dict[str, Any]):
     return plugin
 
 
-def create_tts_plugin(user_settings: Dict[str, Any]):
-    config_key_str = user_settings.get(
-        "tts_config_key", DEFAULT_SETTINGS["tts_config_key"])
-    try:
-        base_config = TTSConfig[config_key_str].value
-    except KeyError:
-        print(
-            f"Warning: Invalid TTS config key '{config_key_str}'. Falling back to default.")
-        base_config = TTSConfig[DEFAULT_SETTINGS["tts_config_key"]].value
+def create_model_instance(model_type: str, config: Dict[str, Any]):
+    """Create a model instance of the specified type using the plugin factory.
+    This provides compatibility with the old ModelFactory interface.
 
-    final_config = _apply_overrides_to_config(
-        base_config, user_settings, "tts")
-    provider = final_config["provider"]
+    Args:
+        model_type: Type of model to create ('stt', 'llm', or 'tts')
+        config: Configuration dictionary for the model, using the backend configuration format
+
+    Returns:
+        An instance of the specified model type
+    """
+    if model_type == "stt":
+        return create_stt_plugin(config)
+    elif model_type == "llm":
+        return create_llm_plugin(config)
+    elif model_type == "tts":
+        return create_tts_plugin(config)
+    else:
+        raise ValueError(f"Unknown model type: {model_type}")
+
+
+def create_tts_plugin(user_settings: Dict[str, Any]):
+    base_config = {**user_settings}
+    # If custom voice ID is provided, use it instead of the default voice
+    if user_settings.get("custom_voice_id"):
+        base_config["voice"] = user_settings["custom_voice_id"]
+
+    provider = base_config["provider"]
 
     # Define parameter mappings based on provider
     if provider == "cartesia":
@@ -237,7 +241,7 @@ def create_tts_plugin(user_settings: Dict[str, Any]):
     plugin = _instantiate_configured_plugin(
         provider=provider,
         api_key_env_var=api_key,
-        config_params=final_config,
+        config_params=base_config,
         provider_param_mapping=param_mapping
     )
 
@@ -249,3 +253,22 @@ def create_tts_plugin(user_settings: Dict[str, Any]):
         return cartesia.TTS(language=fallback_config["language"], voice=fallback_config["voice"])
 
     return plugin
+
+
+# Factory interface matching the old ModelFactory
+
+
+class ModelFactory:
+    """Deprecated: Use create_*_plugin functions directly instead"""
+
+    @staticmethod
+    def create_stt(config: Dict[str, Any]):
+        return create_model_instance("stt", config)
+
+    @staticmethod
+    def create_llm(config: Dict[str, Any]):
+        return create_model_instance("llm", config)
+
+    @staticmethod
+    def create_tts(config: Dict[str, Any]):
+        return create_model_instance("tts", config)
