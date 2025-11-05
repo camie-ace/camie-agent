@@ -67,6 +67,7 @@ jobs:
           --set-string secrets.dotenv.DEEPGRAM_API_KEY='${{ secrets.DOTENV_DEEPGRAM_API_KEY }}' \
           --set-string secrets.dotenv.OPENAI_API_KEY='${{ secrets.DOTENV_OPENAI_API_KEY }}' \
           --set-string secrets.dotenv.CARTESIA_API_KEY='${{ secrets.DOTENV_CARTESIA_API_KEY }}' \
+          --set-string secrets.dotenv.MISTRAL_API_KEY='${{ secrets.DOTENV_MISTRAL_API_KEY }}' \
           --set-string secrets.dotenv.ELEVEN_API_KEY='${{ secrets.DOTENV_ELEVEN_API_KEY }}' \
           --set-string secrets.dotenv.LIVEKIT_API_KEY='${{ secrets.DOTENV_LIVEKIT_API_KEY }}' \
           --set-string secrets.dotenv.LIVEKIT_API_SECRET='${{ secrets.DOTENV_LIVEKIT_API_SECRET }}' \

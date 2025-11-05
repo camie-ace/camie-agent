@@ -1,4 +1,10 @@
 """
+DEPRECATED: Use plugin_factory.py instead.
+This module is maintained for backward compatibility only.
+New code should use the plugin_factory module which provides better error handling,
+configuration management, and fallback mechanisms.
+
+Legacy documentation:
 Dynamic model factory for creating STT, LLM, and TTS instances based on configuration
 
 Supported providers:
@@ -23,6 +29,7 @@ from livekit.plugins import (
     deepgram,
     elevenlabs,
     cartesia,
+    mistralai
 )
 from livekit.plugins.elevenlabs import VoiceSettings
 from config.config_definitions import TTSConfig
@@ -219,7 +226,7 @@ class ModelFactory:
             return cartesia.TTS(
                 model="sonic-2",
                 language="en",
-                voice_id="228fca29-3a0a-435c-8728-5cb483251068"
+                voice="228fca29-3a0a-435c-8728-5cb483251068"
             )
 
 

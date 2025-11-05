@@ -14,9 +14,8 @@ from livekit.plugins import (
     noise_cancellation,
     silero,
 )
-from livekit.plugins.turn_detector.multilingual import MultilingualModel
 from utils.config_fetcher import get_agent_config_from_room
-from utils.model_factory import ModelFactory
+from utils.plugin_factory import ModelFactory
 
 from utils.room_extractor import extract_room_name, extract_phone_number as extract_agent_conf_id
 from utils.call_history import (
@@ -349,9 +348,9 @@ class Assistant(AbstractAgent):
             "model": config.get("voice_provider_model", "sonic-2"),
             "voice": config.get("voice"),
             "custom_voice_id": config.get("custom_voice_id"),
-            "speed": float(config.get("voice_speed", 1)),
-            "stability": int(config.get("stability", 75)),
-            "clarity_similarity": int(config.get("clarity_similarity", 85)),
+            "speed": float(config.get("voice_speed", 1.0)),
+            "stability": int(config.get("stability", 75)) /100,
+            "similarity_boost": int(config.get("clarity_similarity", 85)) /100,
             "voice_improvement": bool(config.get("voice_improvement", True)),
             "language": config.get("agent_language", "en-US")
         }
