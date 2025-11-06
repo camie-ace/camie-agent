@@ -38,7 +38,7 @@ livekit-agents==1.2.17
 livekit-api==1.0.7
 livekit-blingfire==1.0.0
 livekit-plugins-anthropic==1.2.17
-livekit-plugins-cartesia==1.2.17
+livekit-plugins-cartesia==1.0.22
 livekit-plugins-deepgram==1.2.17
 livekit-plugins-elevenlabs==1.2.17
 livekit-plugins-mistralai==1.2.17
