@@ -43,7 +43,7 @@ livekit-plugins-deepgram==1.0.22
 livekit-plugins-elevenlabs==1.0.22
 livekit-plugins-mistralai==1.2.17
 livekit-plugins-noise-cancellation==0.2.4
-livekit-plugins-openai==1.0.22
+livekit-plugins-openai==1.2.5
 livekit-plugins-silero==1.0.22
 livekit-plugins-turn-detector==1.0.22
 livekit-protocol==1.0.3
