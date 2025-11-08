@@ -11,13 +11,13 @@ from config.config_definitions import STTConfig, LLMConfig, TTSConfig
 PLUGIN_MAPPINGS = {
     # STT Plugins
     "deepgram": {"module": "livekit.plugins.deepgram", "class_name": "STT"},
-    "mistral": {"module": "livekit.plugins.mistral", "class_name": "STT"},
+    # "mistral": {"module": "livekit.plugins.mistral", "class_name": "STT"},
     "elevenlabs_stt": {"module": "livekit.plugins.elevenlabs", "class_name": "STT"},
 
     # LLM Plugins
     "openai": {"module": "livekit.plugins.openai", "class_name": "LLM"},
-    "anthropic": {"module": "livekit.plugins.anthropic", "class_name": "LLM"},
-    "mistral_llm": {"module": "livekit.plugins.mistralai", "class_name": "LLM"},
+    # "anthropic": {"module": "livekit.plugins.anthropic", "class_name": "LLM"},
+    # "mistral_llm": {"module": "livekit.plugins.mistralai", "class_name": "LLM"},
 
     # TTS Plugins
     "cartesia": {"module": "livekit.plugins.cartesia", "class_name": "TTS"},
@@ -122,9 +122,9 @@ def create_stt_plugin(user_settings: Dict[str, Any]):
     elif provider == "elevenlabs_stt" or "elevenlabs" in provider:
         param_mapping = {"model": "model_id", "language": "language_code"}
         api_key = "ELEVEN_API_KEY"
-    elif provider == "mistral":
-        param_mapping = {"model": "model", "language": "language"}
-        api_key = "MISTRAL_API_KEY"
+    # elif provider == "mistral":
+    #     param_mapping = {"model": "model", "language": "language"}
+    #     api_key = "MISTRAL_API_KEY"
     else:
         print(
             f"Warning: Unsupported STT provider '{provider}'. Falling back to default Deepgram.")
@@ -162,12 +162,12 @@ def create_llm_plugin(user_settings: Dict[str, Any]):
     if provider == "openai":
         param_mapping = {"model": "model", "temperature": "temperature"}
         api_key = "OPENAI_API_KEY"
-    elif provider == "anthropic":
-        param_mapping = {"model": "model", "temperature": "temperature"}
-        api_key = "ANTHROPIC_API_KEY"
-    elif provider == "mistral_llm" or "mistral" in provider:
-        param_mapping = {"model": "model", "temperature": "temperature"}
-        api_key = "MISTRAL_API_KEY"
+    # elif provider == "anthropic":
+    #     param_mapping = {"model": "model", "temperature": "temperature"}
+    #     api_key = "ANTHROPIC_API_KEY"
+    # elif provider == "mistral_llm" or "mistral" in provider:
+    #     param_mapping = {"model": "model", "temperature": "temperature"}
+    #     api_key = "MISTRAL_API_KEY"
     else:
         print(
             f"Warning: Unsupported LLM provider '{provider}'. Falling back to default OpenAI.")
