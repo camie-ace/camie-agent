@@ -159,6 +159,12 @@ class Assistant(AbstractAgent):
 
         # Log initial room state
         logger.info(f"Room context: {ctx.room}")
+        try:
+            self._participant_context = ctx.room.remote_participants or (
+                json.loads(ctx.room.metadata) if ctx.room.metadata else {}
+            )
+        except json.JSONDecodeError:
+            logger.error(f"Failed to parse room metadata: {ctx.room.metadata}")
         logger.info(f"Existing participants: {ctx.room.remote_participants}")
 
         # Set up event listener
@@ -198,8 +204,8 @@ class Assistant(AbstractAgent):
                                      else noise_cancellation.BVC())
 
             # Update interaction context
-            context["call_type"] = context.get("call_type", call_type)
-            self._participant_context = context
+            self._participant_context["call_type"] = context.get(
+                "call_type", call_type)
 
             # Initialize session recording if not opted out
             self._session_id = await self._start_call_recording(config_id, call_type)
