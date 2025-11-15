@@ -500,6 +500,18 @@ async def entrypoint(ctx: agents.JobContext):
             if participant.metadata:
                 context = json.loads(participant.metadata)
                 participant_context.update(context)
+                logger.info(f"Parsed participant metadata: {context}")
+            # Also check if identity contains metadata (LiveKit sometimes puts it there)
+            elif participant.identity:
+                try:
+                    context = json.loads(participant.identity)
+                    participant_context.update(context)
+                    logger.info(
+                        f"Parsed participant identity as metadata: {context}")
+                except (json.JSONDecodeError, TypeError):
+                    # Identity is just a regular string, not JSON
+                    logger.info(
+                        f"Participant identity is not JSON: {participant.identity}")
         except json.JSONDecodeError:
             logger.error(
                 f"Failed to parse participant metadata: {participant.metadata}")
