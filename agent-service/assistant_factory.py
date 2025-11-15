@@ -69,16 +69,22 @@ async def create_assistant_with_config(
         config_id = extract_agent_conf_id(room_name)
         logger.info(f"SIP call detected - config ID: {config_id}")
 
-        # Check if direction is already in participant context, otherwise default to inbound
-        if "direction" not in participant_context:
+        # Check for direction or call_type in participant context
+        # Prefer 'direction' field, but fall back to 'call_type' if present
+        if "direction" in participant_context:
+            call_type = participant_context["direction"]
+            logger.info(
+                f"Using direction from participant context: {call_type}")
+        elif "call_type" in participant_context:
+            call_type = participant_context["call_type"]
+            participant_context["direction"] = call_type
+            logger.info(
+                f"Using call_type from participant context: {call_type}")
+        else:
+            call_type = "inbound"
             participant_context["direction"] = "inbound"
             logger.info(
-                "No direction in participant context, defaulting to inbound")
-        else:
-            logger.info(
-                f"Using direction from participant context: {participant_context['direction']}")
-
-        call_type = participant_context["direction"]
+                "No direction or call_type in participant context, defaulting to inbound")
     else:
         call_type = "web"
         config_id = participant.identity
