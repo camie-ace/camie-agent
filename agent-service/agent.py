@@ -1,12 +1,10 @@
-from dataclasses import dataclass
-from typing import Dict, Any, Optional, List, Callable
+from typing import Dict, Any, Optional
 from abc import ABC, abstractmethod
 from dotenv import load_dotenv
 import json
 import logging
 import asyncio
 import signal
-import os
 
 from livekit import agents, rtc
 from livekit.agents import AgentSession, Agent, RoomInputOptions
@@ -16,7 +14,9 @@ from livekit.plugins import (
 )
 from utils.config_fetcher import get_agent_config_from_room
 from utils.plugin_factory import ModelFactory
-
+from utils.config_processor import ConfigProcessor
+from utils.session_monitors import SessionMonitors
+from utils.tool_loader import ToolLoader
 from utils.room_extractor import extract_room_name, extract_phone_number as extract_agent_conf_id
 from utils.call_history import (
     start_call_recording,
@@ -24,36 +24,12 @@ from utils.call_history import (
     update_call_stage,
     end_call_recording
 )
-from utils.business_tools import get_tool_by_name
+from assistant_factory import AgentConfig
 
 # Configure logging
 logger = logging.getLogger(__name__)
 
 load_dotenv()
-
-
-@dataclass
-class ToolConfig:
-    """Data class to hold tool configuration"""
-    enabled: bool
-    url: Optional[str] = None
-    metadata: Optional[Dict[str, Any]] = None
-
-
-@dataclass
-class AgentConfig:
-    """Data class to hold agent configuration"""
-    ctx: agents.JobContext
-    stt_config: Dict[str, Any]
-    tts_config: Dict[str, Any]
-    llm_config: Dict[str, Any]
-    instructions: str
-    welcome_message: str
-    welcome_type: str
-    end_call_on_silence: bool
-    silence_duration: int
-    max_call_duration: int
-    tools: Dict[str, ToolConfig]
 
 
 class AbstractAgent(Agent, ABC):
@@ -81,29 +57,34 @@ class AbstractAgent(Agent, ABC):
 
 
 class Assistant(AbstractAgent):
-    def __init__(self, instructions: str = "You are a helpful voice AI assistant.", session_id: str = None, ctx: Optional[agents.JobContext] = None) -> None:
+    def __init__(self,
+                 instructions: str = "You are a helpful voice AI assistant.",
+                 session_id: str = None,
+                 ctx: Optional[agents.JobContext] = None,
+                 agent_config: Optional[AgentConfig] = None,
+                 raw_config: Optional[Dict[str, Any]] = None) -> None:
         """Initialize the Assistant agent.
 
         Args:
-            instructions: Base instructions for the agent's behavior
+            instructions: Base instructions for the agent's behavior (used if agent_config not provided)
             session_id: Optional existing session ID for resuming a session
             ctx: Optional job context for the agent session
+            agent_config: Optional pre-loaded AgentConfig object
+            raw_config: Optional raw configuration dictionary from API
         """
         super().__init__(instructions=instructions)
         self._session_id = session_id
         self._interaction_stage = "greeting"
         self._agent_session: Optional[AgentSession] = None
-        self._agent_config: Optional[AgentConfig] = None
+        self._agent_config = agent_config  # Store pre-loaded config if provided
+        self._raw_config = raw_config  # Store raw config for reference
         self._room_name: Optional[str] = None
         self._participant_context: Optional[Dict] = None
         self._audio_processor = noise_cancellation.BVC()
-        self._tools: List[Callable] = []
         self._ctx = ctx  # Store the job context
 
-        # Session monitoring
-        self._call_duration_task: Optional[asyncio.Task] = None
-        self._silence_monitor_task: Optional[asyncio.Task] = None
-        self._last_voice_activity_time = asyncio.Event()
+        # Initialize session monitors
+        self._monitors = SessionMonitors(self)
         self._voice_activity_detection_control = None
         self._interruption_sensitivity_control = None
 
@@ -140,9 +121,16 @@ class Assistant(AbstractAgent):
     async def initialize(self, ctx: agents.JobContext) -> None:
         """Initialize the agent with the given context
 
+        DEPRECATED: This method is no longer used in the refactored flow.
+        The new entrypoint() uses create_assistant_with_config() factory function instead.
+        Kept for backward compatibility with AbstractAgent interface.
+
         Args:
             ctx: The job context containing room and connection information
         """
+        logger.warning(
+            "initialize() called - this method is deprecated in the refactored flow")
+
         # Store the job context
         self._ctx = ctx
 
@@ -173,9 +161,16 @@ class Assistant(AbstractAgent):
     async def handle_participant_connected(self, participant: rtc.RemoteParticipant) -> None:
         """Process new participant connection and initialize interaction
 
+        DEPRECATED: This method is no longer used in the refactored flow.
+        The new entrypoint() uses create_assistant_with_config() factory function instead.
+        Kept for backward compatibility with AbstractAgent interface.
+
         Args:
             participant: The newly connected participant
         """
+        logger.warning(
+            "handle_participant_connected() called - this method is deprecated in the refactored flow")
+
         # Log comprehensive participant information
         logger.info("New participant connection:", extra={
             "participant_details": str(participant),
@@ -207,9 +202,10 @@ class Assistant(AbstractAgent):
             self._participant_context["call_type"] = context.get(
                 "call_type", call_type)
 
-            # Initialize session recording if not opted out
-            self._session_id = await self._start_call_recording(config_id, call_type)
-            logger.info(f"Call type: {call_type}")
+            # For deprecated flow, we'd need raw_config here but don't have it
+            # So we skip the recording initialization in deprecated path
+            logger.warning(
+                "Skipping recording initialization in deprecated path")
 
             if self._session_id is None:
                 logger.info(
@@ -236,29 +232,24 @@ class Assistant(AbstractAgent):
                 f"Failed to parse participant metadata: {participant.metadata}")
         return {}
 
-    async def _start_call_recording(self, config_id: str, interaction_type: str) -> Optional[str]:
+    async def _start_call_recording(self, config_id: str, interaction_type: str, raw_config: Dict[str, Any]) -> Optional[str]:
         """Initialize session recording and monitoring if not opted out
 
         Args:
             config_id: Unique identifier for agent configuration
             interaction_type: Type of interaction (web/voice)
+            raw_config: Pre-fetched raw configuration dictionary from API
 
         Returns:
             str: The unique session identifier, or None if recording is disabled
         """
-        # First, check if we need to get the configuration to check opt_out_sensitive_data
         try:
-            # Fetch raw config to check opt_out_sensitive_data setting
-            raw_config = await get_agent_config_from_room(
-                self._room_name,
-                self._participant_context
-            )
-
             # Skip recording if opt_out_sensitive_data is True
             if raw_config.get("opt_out_sensitive_data", False):
                 logger.info(
                     f"Call recording disabled due to compliance settings: {raw_config.get('opt_out_sensitive_data')}")
-                logger.info("No call history or sensitive data will be recorded for this session")
+                logger.info(
+                    "No call history or sensitive data will be recorded for this session")
                 return None
 
             # Proceed with recording since opt_out_sensitive_data is False or not set
@@ -271,256 +262,84 @@ class Assistant(AbstractAgent):
             return session_id
 
         except Exception as e:
-            logger.error(f"Error checking recording opt-out status: {str(e)}")
+            logger.error(f"Error starting call recording: {str(e)}")
             # Default to not recording if there's an error
             return None
 
     async def _load_config(self) -> None:
-        """Load and initialize agent configuration"""
-        # Fetch configuration based on room and context
-        raw_config = await get_agent_config_from_room(
-            self._room_name,
-            self._participant_context
-        )
+        """Validate and finalize agent configuration (config should already be loaded)"""
+        # If config was not pre-loaded, this is a fallback scenario
+        if self._agent_config is None:
+            logger.warning(
+                "Agent config was not pre-loaded, fetching now (fallback mode)")
+            raw_config = await get_agent_config_from_room(
+                self._room_name,
+                self._participant_context
+            )
+            self._raw_config = raw_config
+
+            # Process and create AgentConfig using ConfigProcessor
+            if raw_config:
+                self._voice_activity_detection_control = raw_config.get(
+                    'voice_activity_detection_control', 0.20)
+
+            self._agent_config = AgentConfig(
+                ctx=self._ctx,
+                stt_config=ConfigProcessor.prepare_stt_config(raw_config),
+                tts_config=ConfigProcessor.prepare_tts_config(raw_config),
+                llm_config=ConfigProcessor.prepare_llm_config(raw_config),
+                instructions=raw_config.get(
+                    "assistant_instruction",
+                    "You are a helpful voice AI assistant."
+                ),
+                welcome_message=raw_config.get(
+                    "static_message",
+                    "Hello! How can I help you today?"
+                ),
+                welcome_type=raw_config.get(
+                    "welcome_message_type",
+                    "human_initiates"
+                ),
+                end_call_on_silence=raw_config.get(
+                    "end_call_on_silence", False),
+                silence_duration=raw_config.get("silence_duration", 60),
+                max_call_duration=raw_config.get("max_call_duration", 1800),
+                tools=ConfigProcessor.prepare_tool_configs(
+                    raw_config.get("tools", {}))
+            )
+        else:
+            # Config was pre-loaded, just extract VAD control if needed
+            if self._raw_config:
+                self._voice_activity_detection_control = self._raw_config.get(
+                    'voice_activity_detection_control', 0.20)
+            logger.info("Using pre-loaded agent configuration")
 
         # Update session with configuration if recording is enabled
-        # Only update call config if recording is active (session_id exists)
-        if self._session_id:
-            await update_call_config(self._session_id, raw_config)
-            logger.info(f"Updated call configuration for recorded session: {self._session_id}")
+        if self._session_id and self._raw_config:
+            await update_call_config(self._session_id, self._raw_config)
+            logger.info(
+                f"Updated call configuration for recorded session: {self._session_id}")
         else:
-            logger.info("Skipping call config update - recording disabled due to privacy settings")
+            logger.info(
+                "Skipping call config update - recording disabled due to privacy settings")
 
-        logger.info("Agent configuration loaded", extra={
-            "config": raw_config
+        logger.info("Agent configuration validated", extra={
+            "config": self._raw_config if self._raw_config else "default"
         })
-
-        if (raw_config):
-            self._voice_activity_detection_control = raw_config.get(
-                'voice_activity_detection_control', 0.20)
-
-        # Initialize processed configuration
-        self._agent_config = AgentConfig(
-            ctx=self._ctx,
-            stt_config=self._prepare_stt_config(raw_config),
-            tts_config=self._prepare_tts_config(raw_config),
-            llm_config=self._prepare_llm_config(raw_config),
-            instructions=raw_config.get(
-                "assistant_instruction",
-                "You are a helpful voice AI assistant."
-            ),
-            welcome_message=raw_config.get(
-                "static_message",
-                "Hello! How can I help you today?"
-            ),
-            welcome_type=raw_config.get(
-                "welcome_message_type",
-                "human_initiates"
-            ),
-            end_call_on_silence=raw_config.get("end_call_on_silence", False),
-            silence_duration=raw_config.get("silence_duration", 60),
-            max_call_duration=raw_config.get("max_call_duration", 1800),
-            tools=self._prepare_tool_configs(raw_config.get("tools", {}))
-        )
-
-    def _prepare_stt_config(self, config: Dict) -> Dict:
-        """Prepare STT configuration
-
-        Args:
-            config: Raw configuration dictionary from the config service
-
-        Returns:
-            Dict containing structured STT configuration
-        """
-        stt_config = {
-            "provider": config.get("transcription_provider", "deepgram"),
-            "model": config.get("transcription_provider_model", "nova-2"),
-            "language": config.get("agent_language", "en-US")
-        }
-        logger.info(f"Using STT provider: {stt_config['provider']}")
-        return stt_config
-
-    def _prepare_tts_config(self, config: Dict) -> Dict:
-        """Prepare TTS configuration
-
-        Args:
-            config: Raw configuration dictionary from the config service
-
-        Returns:
-            Dict containing structured TTS configuration
-        """
-        tts_config = {
-            "provider": config.get("voice_provider", "cartesia"),
-            "model": config.get("voice_provider_model", "sonic-2"),
-            "voice": config.get("voice"),
-            "custom_voice_id": config.get("custom_voice_id"),
-            "speed": float(config.get("voice_speed", 1.0)),
-            "stability": int(config.get("stability", 75)) /100,
-            "similarity_boost": int(config.get("clarity_similarity", 85)) /100,
-            "voice_improvement": bool(config.get("voice_improvement", True)),
-            "language": config.get("agent_language", "en-US")
-        }
-        logger.info(
-            f"Using TTS provider: {tts_config['provider']} with voice: {tts_config['voice']}")
-        return tts_config
-
-    def _prepare_llm_config(self, config: Dict) -> Dict:
-        """Prepare LLM configuration
-
-        Args:
-            config: Raw configuration dictionary from the config service
-
-        Returns:
-            Dict containing structured LLM configuration
-        """
-        llm_config = {
-            "provider": config.get("llm", "openai"),
-            "model": config.get("llm_model", "gpt-4"),
-            "temperature": 0.7  # Default temperature if not specified
-        }
-        
-        logger.info(f"Using LLM provider: {llm_config['provider']} with model: {llm_config['model']}")
-        return llm_config
-
-    def _prepare_tool_configs(self, tools_config: Dict[str, Any]) -> Dict[str, ToolConfig]:
-        """
-        Process raw tool configuration into structured ToolConfig objects
-
-        Args:
-            tools_config: Raw tool configuration from API
-
-        Returns:
-            Dictionary mapping tool names to their configurations
-        """
-        result = {}
-
-        # Default tool configuration (all disabled)
-        default_tools = {
-            "knowledge_base": False,
-            "sms": False,
-            "calendar": False,
-            "email": False
-        }
-
-        # For backward compatibility, handle legacy boolean format
-        for tool_name, default in default_tools.items():
-            # Check if the tool exists in config
-            tool_config = tools_config.get(tool_name, default)
-
-            # If it's just a boolean, convert to ToolConfig
-            if isinstance(tool_config, bool):
-                result[tool_name] = ToolConfig(
-                    enabled=tool_config,
-                    url=None,
-                    metadata=None
-                )
-            # If it's a dictionary, extract the structured data
-            elif isinstance(tool_config, dict):
-                result[tool_name] = ToolConfig(
-                    enabled=tool_config.get("enabled", False),
-                    url=tool_config.get("url"),
-                    metadata=tool_config.get("metadata", {})
-                )
-            # Otherwise, default to disabled
-            else:
-                result[tool_name] = ToolConfig(
-                    enabled=False,
-                    url=None,
-                    metadata=None
-                )
-
-        return result
-
-    async def _load_tools(self) -> List[Callable]:
-        """
-        Load tools based on agent configuration
-
-        Returns:
-            List of callable tool functions
-        """
-        tools_list = []
-        if not self._agent_config:
-            return tools_list
-
-        # Get tool configuration
-        tool_configs = self._agent_config.tools
-
-        # Load each enabled tool with its configuration
-        # Knowledge base tool
-        if tool_configs.get("knowledge_base") and tool_configs["knowledge_base"].enabled:
-            knowledge_tool = get_tool_by_name("knowledge_base")
-            if knowledge_tool:
-                # Pass the configuration to the tool via environment variables if needed
-                if tool_configs["knowledge_base"].url:
-                    os.environ["KNOWLEDGE_BASE_API_URL"] = tool_configs["knowledge_base"].url
-                tools_list.append(knowledge_tool)
-                logger.info("Loaded knowledge base tool")
-
-        # SMS tool
-        if tool_configs.get("sms") and tool_configs["sms"].enabled:
-            sms_tool = get_tool_by_name("sms")
-            if sms_tool:
-                if tool_configs["sms"].url:
-                    os.environ["SMS_API_URL"] = tool_configs["sms"].url
-                tools_list.append(sms_tool)
-                logger.info("Loaded SMS tool")
-
-        # Calendar tools
-        if tool_configs.get("calendar") and tool_configs["calendar"].enabled:
-            calendar_config = tool_configs["calendar"]
-            calendar_metadata = calendar_config.metadata or {}
-            calendar_system = calendar_metadata.get("system", "calcom")
-
-            # Set calendar API URL if provided
-            if calendar_config.url:
-                if calendar_system == "calcom":
-                    os.environ["CALCOM_API_URL"] = calendar_config.url
-                elif calendar_system == "google":
-                    os.environ["GCAL_API_URL"] = calendar_config.url
-
-            # Set additional metadata like API keys if provided
-            if calendar_metadata.get("api_key"):
-                if calendar_system == "calcom":
-                    os.environ["CALCOM_API_KEY"] = calendar_metadata["api_key"]
-                elif calendar_system == "google":
-                    os.environ["GCAL_API_KEY"] = calendar_metadata["api_key"]
-
-            # Load appropriate calendar tools based on system
-            if calendar_system == "calcom":
-                # Add Cal.com tools
-                for tool_name in ["calcom_availability", "calcom_booking", "calcom_modify"]:
-                    tool = get_tool_by_name(tool_name)
-                    if tool:
-                        tools_list.append(tool)
-                logger.info("Loaded Cal.com calendar tools")
-            elif calendar_system == "google":
-                # Add Google Calendar tools
-                for tool_name in ["gcal_availability", "gcal_booking", "gcal_modify"]:
-                    tool = get_tool_by_name(tool_name)
-                    if tool:
-                        tools_list.append(tool)
-                logger.info("Loaded Google Calendar tools")
-
-        return tools_list
 
     async def start_session(self) -> None:
         """Start the agent session"""
         await self._load_config()
 
-        # Load tools based on configuration
-        tools = await self._load_tools()
+        # Load tools based on configuration using ToolLoader
+        tools = await ToolLoader.load_tools(self._agent_config.tools)
 
-        # Start call duration and silence monitors if configured
-        if self._agent_config.max_call_duration > 0:
-            self._call_duration_task = asyncio.create_task(
-                self._monitor_call_duration(
-                    self._agent_config.max_call_duration)
-            )
-
-        if self._agent_config.end_call_on_silence and self._agent_config.silence_duration > 0:
-            self._silence_monitor_task = asyncio.create_task(
-                self._monitor_silence(self._agent_config.silence_duration)
-            )
+        # Start call duration and silence monitors using SessionMonitors
+        self._monitors.start_monitoring(
+            max_call_duration=self._agent_config.max_call_duration,
+            enable_silence_detection=self._agent_config.end_call_on_silence,
+            silence_duration=self._agent_config.silence_duration
+        )
 
         # Create model components
         stt = ModelFactory.create_stt(self._agent_config.stt_config)
@@ -533,7 +352,6 @@ class Assistant(AbstractAgent):
             tts=tts,
             vad=silero.VAD.load(
                 min_silence_duration=self._voice_activity_detection_control or 0.05),
-            # turn_detection=MultilingualModel(),
             allow_interruptions=True,
         )
 
@@ -546,15 +364,9 @@ class Assistant(AbstractAgent):
             ),
         )
 
-        # Reset the voice activity tracker whenever we detect speech
-        def on_voice_activity(is_speaking: bool):
-            if is_speaking:
-                self._last_voice_activity_time.set()
-                self._last_voice_activity_time.clear()
-
         # Register voice activity handler if we're using silence detection
         if self._agent_config.end_call_on_silence:
-            self._agent_session.on("voice_activity")(on_voice_activity)
+            self._monitors.setup_voice_activity_handler(self._agent_session)
 
         # Handle welcome message based on welcome_message_type
         if self._agent_config.welcome_type == "ai_initiates":
@@ -569,100 +381,12 @@ class Assistant(AbstractAgent):
             )
         # For "human_initiates", we don't send any welcome message and wait for the user to speak first
 
-    async def _monitor_call_duration(self, max_duration_seconds: int) -> None:
-        """
-        Monitor and end call after max duration
-
-        Args:
-            max_duration_seconds: Maximum call duration in seconds
-        """
-        try:
-            logger.info(
-                f"Call duration monitor started: {max_duration_seconds}s maximum")
-            await asyncio.sleep(max_duration_seconds)
-
-            if self._agent_session:
-                logger.info(
-                    "Call duration limit reached - sending farewell message")
-                # Inform user that call duration limit reached
-                await self._agent_session.generate_reply(
-                    instructions="Inform the user that the maximum call duration has been reached and say goodbye politely.",
-                    allow_interruptions=False
-                )
-
-                # Allow time for the goodbye message to be spoken and heard
-                logger.info("Waiting for farewell message to complete")
-                # Increased time to ensure message is fully delivered
-                await asyncio.sleep(8)
-
-                # End the call
-                logger.info("Ending call due to maximum duration exceeded")
-                await self.end_session("max_duration_exceeded")
-
-        except asyncio.CancelledError:
-            logger.info("Call duration monitor cancelled")
-        except Exception as e:
-            logger.exception(f"Error in call duration monitor: {str(e)}")
-
-    async def _monitor_silence(self, silence_duration_seconds: int) -> None:
-        """
-        Monitor for silence and end call after specified duration
-
-        Args:
-            silence_duration_seconds: Maximum silence duration in seconds
-        """
-        try:
-            logger.info(
-                f"Silence monitor started: {silence_duration_seconds}s threshold")
-
-            while True:
-                # Wait for the silence duration
-                try:
-                    # Wait for voice activity or timeout
-                    await asyncio.wait_for(
-                        self._last_voice_activity_time.wait(),
-                        timeout=silence_duration_seconds
-                    )
-                    # If we reach here, there was voice activity, so reset and continue monitoring
-                    continue
-                except asyncio.TimeoutError:
-                    # No voice activity detected within timeout period
-                    if self._agent_session:
-                        logger.info(
-                            "Silence timeout reached - sending farewell message")
-                        # Inform user about silence timeout
-                        await self._agent_session.generate_reply(
-                            instructions="Inform the user that due to lack of activity, you need to end the call, and say goodbye politely.",
-                            allow_interruptions=False
-                        )
-
-                        # Allow time for the goodbye message to be spoken and heard
-                        logger.info("Waiting for farewell message to complete")
-                        # Increased time to ensure message is fully delivered
-                        await asyncio.sleep(8)
-
-                        # End the call
-                        logger.info("Ending call due to silence timeout")
-                        await self.end_session("silence_timeout")
-                        break
-
-        except asyncio.CancelledError:
-            logger.info("Silence monitor cancelled")
-        except Exception as e:
-            logger.exception(f"Error in silence monitor: {str(e)}")
-
     async def end_session(self, reason: str = None) -> None:
         """End the agent session and terminate the call completely"""
         logger.info(f"Ending session with reason: {reason}")
 
-        # Cancel monitoring tasks
-        if self._call_duration_task and not self._call_duration_task.done():
-            self._call_duration_task.cancel()
-            logger.info("Cancelled call duration monitoring task")
-
-        if self._silence_monitor_task and not self._silence_monitor_task.done():
-            self._silence_monitor_task.cancel()
-            logger.info("Cancelled silence monitoring task")
+        # Cancel monitoring tasks using SessionMonitors
+        await self._monitors.cancel_all()
 
         # Stop the agent session
         if self._agent_session:
@@ -694,7 +418,8 @@ class Assistant(AbstractAgent):
             except Exception as e:
                 logger.error(f"Error finalizing call recording: {str(e)}")
         else:
-            logger.info("Session ended (no recording to finalize - disabled due to compliance settings)")
+            logger.info(
+                "Session ended (no recording to finalize - disabled due to compliance settings)")
 
         # Terminate the call by disconnecting from the room
         await self._terminate_call(reason)
@@ -727,11 +452,67 @@ class Assistant(AbstractAgent):
 
 async def entrypoint(ctx: agents.JobContext):
     """Entry point for the agent service"""
+    # Import here to avoid circular dependency
+    from assistant_factory import create_assistant_with_config
+
     assistant = None
     try:
-        # Create and initialize the assistant with the context
-        assistant = Assistant(ctx=ctx)
-        await assistant.initialize(ctx)
+        # Connect to the room first
+        await ctx.connect()
+        room_name = extract_room_name(ctx)
+        logger.info(f"Connected to room: {room_name}")
+
+        # Parse initial room metadata
+        try:
+            participant_context = ctx.room.remote_participants or (
+                json.loads(ctx.room.metadata) if ctx.room.metadata else {}
+            )
+        except json.JSONDecodeError:
+            logger.error(f"Failed to parse room metadata: {ctx.room.metadata}")
+            participant_context = {}
+
+        logger.info(
+            f"Initial participants in room: {ctx.room.remote_participants}")
+
+        # Wait for participant to connect (with timeout)
+        participant_connected = asyncio.Event()
+        participant_ref = {"participant": None}
+
+        def on_participant_join(participant: rtc.RemoteParticipant):
+            logger.info(f"Participant joined: {participant.identity}")
+            participant_ref["participant"] = participant
+            participant_connected.set()
+
+        # Register participant connection handler
+        ctx.room.on("participant_connected")(on_participant_join)
+
+        # Wait for participant with timeout (10 seconds)
+        try:
+            await asyncio.wait_for(participant_connected.wait(), timeout=10.0)
+            participant = participant_ref["participant"]
+            logger.info(f"Participant connected: {participant.identity}")
+        except asyncio.TimeoutError:
+            logger.error("Timeout waiting for participant to connect")
+            raise Exception("No participant connected within timeout period")
+
+        # Parse participant metadata
+        try:
+            if participant.metadata:
+                context = json.loads(participant.metadata)
+                participant_context.update(context)
+        except json.JSONDecodeError:
+            logger.error(
+                f"Failed to parse participant metadata: {participant.metadata}")
+
+        # Create assistant with configuration from API (deferred instantiation)
+        assistant = await create_assistant_with_config(
+            ctx=ctx,
+            room_name=room_name,
+            participant=participant,
+            participant_context=participant_context
+        )
+
+        logger.info("Assistant instantiated with API configuration")
 
         # Set up signal handlers for graceful shutdown
         loop = asyncio.get_event_loop()
