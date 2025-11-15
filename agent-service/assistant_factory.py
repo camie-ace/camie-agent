@@ -66,15 +66,28 @@ async def create_assistant_with_config(
 
     # Determine call type and config ID based on participant
     if participant.kind == rtc.ParticipantKind.PARTICIPANT_KIND_SIP:
-        call_type = "inbound"
         config_id = extract_agent_conf_id(room_name)
         logger.info(f"SIP call detected - config ID: {config_id}")
+
+        # Check if direction is already in participant context, otherwise default to inbound
+        if "direction" not in participant_context:
+            participant_context["direction"] = "inbound"
+            logger.info(
+                "No direction in participant context, defaulting to inbound")
+        else:
+            logger.info(
+                f"Using direction from participant context: {participant_context['direction']}")
+
+        call_type = participant_context["direction"]
     else:
         call_type = "web"
         config_id = participant.identity
         logger.info(f"Web call detected - config ID: {config_id}")
+        # For web calls, also set direction if not present
+        if "direction" not in participant_context:
+            participant_context["direction"] = "inbound"
 
-    # Add call type to participant context
+    # Add call type to participant context for backward compatibility
     participant_context["call_type"] = call_type
 
     # Fetch configuration from API
