@@ -192,27 +192,6 @@ def create_llm_plugin(user_settings: Dict[str, Any]):
     return plugin
 
 
-def create_model_instance(model_type: str, config: Dict[str, Any]):
-    """Create a model instance of the specified type using the plugin factory.
-    This provides compatibility with the old ModelFactory interface.
-
-    Args:
-        model_type: Type of model to create ('stt', 'llm', or 'tts')
-        config: Configuration dictionary for the model, using the backend configuration format
-
-    Returns:
-        An instance of the specified model type
-    """
-    if model_type == "stt":
-        return create_stt_plugin(config)
-    elif model_type == "llm":
-        return create_llm_plugin(config)
-    elif model_type == "tts":
-        return create_tts_plugin(config)
-    else:
-        raise ValueError(f"Unknown model type: {model_type}")
-
-
 def create_tts_plugin(user_settings: Dict[str, Any]):
     base_config = {**user_settings}
     # If custom voice ID is provided, use it instead of the default voice
@@ -253,6 +232,27 @@ def create_tts_plugin(user_settings: Dict[str, Any]):
         return cartesia.TTS(language=fallback_config["language"], voice=fallback_config["voice"])
 
     return plugin
+
+
+def create_model_instance(model_type: str, config: Dict[str, Any]):
+    """Create a model instance of the specified type using the plugin factory.
+    This provides compatibility with the old ModelFactory interface.
+
+    Args:
+        model_type: Type of model to create ('stt', 'llm', or 'tts')
+        config: Configuration dictionary for the model, using the backend configuration format
+
+    Returns:
+        An instance of the specified model type
+    """
+    if model_type == "stt":
+        return create_stt_plugin(config)
+    elif model_type == "llm":
+        return create_llm_plugin(config)
+    elif model_type == "tts":
+        return create_tts_plugin(config)
+    else:
+        raise ValueError(f"Unknown model type: {model_type}")
 
 
 # Factory interface matching the old ModelFactory
