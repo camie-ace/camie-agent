@@ -120,7 +120,7 @@ def create_stt_plugin(user_settings: Dict[str, Any]):
         param_mapping = {"model": "model", "language": "language"}
         api_key = "DEEPGRAM_API_KEY"
     elif provider == "elevenlabs_stt" or "elevenlabs" in provider:
-        param_mapping = {"model": "model_id", "language": "language_code"}
+        param_mapping = {"model": "model", "language": "language"}
         api_key = "ELEVEN_API_KEY"
     # elif provider == "mistral":
     #     param_mapping = {"model": "model", "language": "language"}
