@@ -113,7 +113,10 @@ def _instantiate_configured_plugin(
 
 
 def create_stt_plugin(user_settings: Dict[str, Any]):
-    provider = user_settings["provider"]
+    # Extract from raw API config
+    provider = user_settings.get("transcription_provider", "deepgram")
+    model = user_settings.get("transcription_provider_model", "nova-2")
+    language = user_settings.get("agent_language", "en-US")
 
     # Define parameter mappings based on provider
     if provider == "deepgram":
@@ -122,21 +125,18 @@ def create_stt_plugin(user_settings: Dict[str, Any]):
     elif provider == "elevenlabs_stt" or "elevenlabs" in provider:
         param_mapping = {"model": "model", "language": "language"}
         api_key = "ELEVEN_API_KEY"
-    # elif provider == "mistral":
-    #     param_mapping = {"model": "model", "language": "language"}
-    #     api_key = "MISTRAL_API_KEY"
     else:
         print(
             f"Warning: Unsupported STT provider '{provider}'. Falling back to default Deepgram.")
-        # Use stable French model to avoid Deepgram auto-fallback warnings
         fallback_config = STTConfig.DEEPGRAM_NOVA2_FR.value
         return deepgram.STT(model=fallback_config["model"], language=fallback_config["language"])
 
     # Try to instantiate the configured plugin
+    config_params = {"model": model, "language": language}
     plugin = _instantiate_configured_plugin(
         provider=provider,
         api_key_env_var=api_key,
-        config_params=user_settings,
+        config_params=config_params,
         provider_param_mapping=param_mapping
     )
 
@@ -144,30 +144,21 @@ def create_stt_plugin(user_settings: Dict[str, Any]):
     if plugin is None:
         print(
             f"Failed to instantiate STT plugin for provider '{provider}'. Using fallback.")
-        # Use stable French model to avoid Deepgram auto-fallback warnings
         return deepgram.STT(model="nova-2", language="fr")
 
     return plugin
 
 
 def create_llm_plugin(user_settings: Dict[str, Any]):
-    base_config = {
-        "provider": user_settings.get('llm', 'openai'),
-        "model": user_settings.get('llm_model', 'gpt-4o-mini')
-    }
-
-    provider = base_config["provider"]
+    # Extract from raw API config
+    provider = user_settings.get('llm', 'openai')
+    model = user_settings.get('llm_model', 'gpt-4o-mini')
+    temperature = user_settings.get('temperature', 0.7)
 
     # Define parameter mappings based on provider
     if provider == "openai":
         param_mapping = {"model": "model", "temperature": "temperature"}
         api_key = "OPENAI_API_KEY"
-    # elif provider == "anthropic":
-    #     param_mapping = {"model": "model", "temperature": "temperature"}
-    #     api_key = "ANTHROPIC_API_KEY"
-    # elif provider == "mistral_llm" or "mistral" in provider:
-    #     param_mapping = {"model": "model", "temperature": "temperature"}
-    #     api_key = "MISTRAL_API_KEY"
     else:
         print(
             f"Warning: Unsupported LLM provider '{provider}'. Falling back to default OpenAI.")
@@ -175,10 +166,11 @@ def create_llm_plugin(user_settings: Dict[str, Any]):
         return openai.LLM(model=fallback_config["model"], temperature=fallback_config.get("temperature", 0))
 
     # Try to instantiate the configured plugin
+    config_params = {"model": model, "temperature": temperature}
     plugin = _instantiate_configured_plugin(
         provider=provider,
         api_key_env_var=api_key,
-        config_params=base_config,
+        config_params=config_params,
         provider_param_mapping=param_mapping
     )
 
@@ -193,22 +185,35 @@ def create_llm_plugin(user_settings: Dict[str, Any]):
 
 
 def create_tts_plugin(user_settings: Dict[str, Any]):
-    base_config = {**user_settings}
-    # If custom voice ID is provided, use it instead of the default voice
-    if user_settings.get("custom_voice_id"):
-        base_config["voice"] = user_settings["custom_voice_id"]
+    # Extract from raw API config
+    provider = user_settings.get("voice_provider", "cartesia")
+    model = user_settings.get("voice_provider_model", "sonic-2")
+    language = user_settings.get("agent_language", "en-US")
 
-    provider = base_config["provider"]
+    # Default voice IDs based on provider
+    default_voices = {
+        "cartesia": "228fca29-3a0a-435c-8728-5cb483251068",
+        "elevenlabs": "ODq5zmih8GrVes37Dizd",
+        "openai_tts": "alloy"
+    }
+
+    # Priority: custom_voice_id > voice > default
+    voice = user_settings.get("custom_voice_id") or user_settings.get(
+        "voice") or default_voices.get(provider)
 
     # Define parameter mappings based on provider
     if provider == "cartesia":
         param_mapping = {"language": "language", "voice": "voice"}
+        config_params = {"language": language, "voice": voice}
         api_key = "CARTESIA_API_KEY"
     elif provider == "elevenlabs":
-        param_mapping = {"model": "model", "voice": "voice_id"}
+        param_mapping = {"model": "model",
+                         "voice": "voice_id", "language": "language"}
+        config_params = {"model": model, "voice": voice, "language": language}
         api_key = "ELEVEN_API_KEY"
     elif provider == "openai_tts":
         param_mapping = {"model": "model", "voice": "voice"}
+        config_params = {"model": model, "voice": voice}
         api_key = "OPENAI_API_KEY"
     else:
         print(
@@ -220,7 +225,7 @@ def create_tts_plugin(user_settings: Dict[str, Any]):
     plugin = _instantiate_configured_plugin(
         provider=provider,
         api_key_env_var=api_key,
-        config_params=base_config,
+        config_params=config_params,
         provider_param_mapping=param_mapping
     )
 
