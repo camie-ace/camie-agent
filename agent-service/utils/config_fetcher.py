@@ -103,8 +103,15 @@ async def fetch_agent_config_by_phone(phone_number: str, call_direction: Optiona
             print(f"Error fetching configuration: {error_message}")
             return {}, None
 
-        # Extract the phone config from the data field
+        # Extract the config from the data field
         data = result.get("data", {})
+
+        # For web calls with conf_id, the config is flat in data
+        if conf_id and data and "phone_number" not in data:
+            print(f"Using web call configuration (conf_id: {conf_id})")
+            return data, call_direction
+
+        # For telephony calls, extract from nested phone_number structure
         phone_data = data.get("phone_number", {})
 
         if not phone_data:
