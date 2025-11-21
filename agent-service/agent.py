@@ -285,27 +285,29 @@ class Assistant(AbstractAgent):
 
             self._agent_config = AgentConfig(
                 ctx=self._ctx,
-                stt_config=ConfigProcessor.prepare_stt_config(raw_config),
-                tts_config=ConfigProcessor.prepare_tts_config(raw_config),
-                llm_config=ConfigProcessor.prepare_llm_config(raw_config),
+                stt_config=raw_config if raw_config else {},
+                tts_config=raw_config if raw_config else {},
+                llm_config=raw_config if raw_config else {},
                 instructions=raw_config.get(
                     "assistant_instruction",
                     "You are a helpful voice AI assistant."
-                ),
+                ) if raw_config else "You are a helpful voice AI assistant.",
                 welcome_message=raw_config.get(
                     "static_message",
                     "Hello! How can I help you today?"
-                ),
+                ) if raw_config else "Hello! How can I help you today?",
                 welcome_type=raw_config.get(
                     "welcome_message_type",
                     "human_initiates"
-                ),
+                ) if raw_config else "human_initiates",
                 end_call_on_silence=raw_config.get(
-                    "end_call_on_silence", False),
-                silence_duration=raw_config.get("silence_duration", 60),
-                max_call_duration=raw_config.get("max_call_duration", 1800),
+                    "end_call_on_silence", False) if raw_config else False,
+                silence_duration=raw_config.get(
+                    "silence_duration", 60) if raw_config else 60,
+                max_call_duration=raw_config.get(
+                    "max_call_duration", 1800) if raw_config else 1800,
                 tools=ConfigProcessor.prepare_tool_configs(
-                    raw_config.get("tools", {}))
+                    raw_config.get("tools", {}) if raw_config else {})
             )
         else:
             # Config was pre-loaded, just extract VAD control if needed

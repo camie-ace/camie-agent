@@ -12,7 +12,7 @@ from livekit.plugins import noise_cancellation
 from dataclasses import dataclass
 
 from utils.config_fetcher import get_agent_config_from_room
-from utils.config_processor import ConfigProcessor, ToolConfig
+from utils.config_processor import ToolConfig
 from utils.call_history import start_call_recording
 from utils.room_extractor import extract_phone_number as extract_agent_conf_id
 
@@ -127,12 +127,15 @@ async def create_assistant_with_config(
         'voice_activity_detection_control', 0.20) if raw_config else 0.20
 
     # Create AgentConfig from raw config or use defaults
+    # Pass raw config directly to plugin factory
+    from utils.config_processor import ConfigProcessor
+
     if raw_config:
         agent_config = AgentConfig(
             ctx=ctx,
-            stt_config=ConfigProcessor.prepare_stt_config(raw_config),
-            tts_config=ConfigProcessor.prepare_tts_config(raw_config),
-            llm_config=ConfigProcessor.prepare_llm_config(raw_config),
+            stt_config=raw_config,  # Pass raw config to plugin factory
+            tts_config=raw_config,  # Pass raw config to plugin factory
+            llm_config=raw_config,  # Pass raw config to plugin factory
             instructions=raw_config.get(
                 "assistant_instruction",
                 "You are a helpful voice AI assistant."
@@ -153,12 +156,12 @@ async def create_assistant_with_config(
         )
         logger.info("AgentConfig created from API configuration")
     else:
-        # Use default configuration
+        # Use default configuration with empty dict (plugin factory will use defaults)
         agent_config = AgentConfig(
             ctx=ctx,
-            stt_config=ConfigProcessor.prepare_stt_config({}),
-            tts_config=ConfigProcessor.prepare_tts_config({}),
-            llm_config=ConfigProcessor.prepare_llm_config({}),
+            stt_config={},  # Plugin factory will use defaults
+            tts_config={},  # Plugin factory will use defaults
+            llm_config={},  # Plugin factory will use defaults
             instructions="You are a helpful voice AI assistant.",
             welcome_message="Hello! How can I help you today?",
             welcome_type="human_initiates",
