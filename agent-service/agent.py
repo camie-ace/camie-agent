@@ -474,26 +474,34 @@ async def entrypoint(ctx: agents.JobContext):
         logger.info(
             f"Initial participants in room: {ctx.room.remote_participants}")
 
-        # Wait for participant to connect (with timeout)
-        participant_connected = asyncio.Event()
-        participant_ref = {"participant": None}
+        # Check if participant is already in the room (web calls)
+        participant = None
+        if ctx.room.remote_participants:
+            # Get the first remote participant (usually there's only one)
+            participant = list(ctx.room.remote_participants.values())[0]
+            logger.info(f"Participant already in room: {participant.identity}")
+        else:
+            # Wait for participant to connect (telephony calls)
+            participant_connected = asyncio.Event()
+            participant_ref = {"participant": None}
 
-        def on_participant_join(participant: rtc.RemoteParticipant):
-            logger.info(f"Participant joined: {participant.identity}")
-            participant_ref["participant"] = participant
-            participant_connected.set()
+            def on_participant_join(participant: rtc.RemoteParticipant):
+                logger.info(f"Participant joined: {participant.identity}")
+                participant_ref["participant"] = participant
+                participant_connected.set()
 
-        # Register participant connection handler
-        ctx.room.on("participant_connected")(on_participant_join)
+            # Register participant connection handler
+            ctx.room.on("participant_connected")(on_participant_join)
 
-        # Wait for participant with timeout (10 seconds)
-        try:
-            await asyncio.wait_for(participant_connected.wait(), timeout=10.0)
-            participant = participant_ref["participant"]
-            logger.info(f"Participant connected: {participant.identity}")
-        except asyncio.TimeoutError:
-            logger.error("Timeout waiting for participant to connect")
-            raise Exception("No participant connected within timeout period")
+            # Wait for participant with timeout (10 seconds)
+            try:
+                await asyncio.wait_for(participant_connected.wait(), timeout=10.0)
+                participant = participant_ref["participant"]
+                logger.info(f"Participant connected: {participant.identity}")
+            except asyncio.TimeoutError:
+                logger.error("Timeout waiting for participant to connect")
+                raise Exception(
+                    "No participant connected within timeout period")
 
         # Parse participant metadata
         try:
