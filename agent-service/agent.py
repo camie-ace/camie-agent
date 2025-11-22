@@ -365,9 +365,9 @@ class Assistant(AbstractAgent):
         await self._agent_session.start(
             room=self._ctx.room,
             agent=self,
-            room_input_options=RoomInputOptions(
-                noise_cancellation=self._audio_processor,
-            ),
+            # room_input_options=RoomInputOptions(
+            #     noise_cancellation=self._audio_processor,
+            # ),
         )
 
         # Register voice activity handler if we're using silence detection
@@ -383,9 +383,7 @@ class Assistant(AbstractAgent):
         elif self._agent_config.welcome_type == "ai_static":
             # AI initiates with static message
             await self._agent_session.say(self._agent_config.welcome_message)
-            # await self._agent_session.generate_reply(
-            #     instructions=f"Greet the user with exactly this message: {self._agent_config.welcome_message}"
-            # )
+         
         # For "human_initiates", we don't send any welcome message and wait for the user to speak first
 
     async def end_session(self, reason: str = None) -> None:
