@@ -2,6 +2,7 @@
 Utility to extract phone numbers from room names and fetch configuration from API
 """
 
+import logging
 import os
 import re
 import jwt
@@ -9,6 +10,7 @@ import json
 from typing import Dict, Any, Optional, Tuple
 from utils.api_client import APIClient
 
+logger = logging.getLogger(__name__)
 
 async def extract_phone_from_room_name(room_name: str) -> Optional[str]:
     """
@@ -92,15 +94,15 @@ async def fetch_agent_config_by_phone(phone_number: str, call_direction: Optiona
         # Only pass params if we have any
         params = params if params else None
 
-        print(
+        logger.info(
             f"Fetching agent config for phone: {phone_number}, direction: {call_direction or 'inbound'}, room: {room_name or 'n/a'}, url: {config_url}, params: {params}")
         result = await client._make_request("GET", config_url, headers=headers, params=params)
-        print(f"API Response: {result}")
+        logger.info(f"API Response: {result}")
 
         if result.get("error") or result.get("responseCode") != "00":
             error_message = result.get("message") or result.get(
                 "description") or "Unknown error"
-            print(f"Error fetching configuration: {error_message}")
+            logger.info(f"Error fetching configuration: {error_message}")
             return {}, None
 
         # Extract the config from the data field
@@ -108,30 +110,30 @@ async def fetch_agent_config_by_phone(phone_number: str, call_direction: Optiona
 
         # For web calls with conf_id, the config is flat in data
         if conf_id and data and "phone_number" not in data:
-            print(f"Using web call configuration (conf_id: {conf_id})")
+            logger.info(f"Using web call configuration (conf_id: {conf_id})")
             return data, call_direction
 
         # For telephony calls, extract from nested phone_number structure
         phone_data = data.get("phone_number", {})
 
         if not phone_data:
-            print(f"No configuration found for phone number: {phone_number}")
+            logger.info(f"No configuration found for phone number: {phone_number}")
             return {}, None
 
         # If direction is provided, use it to get the specific config
         if call_direction and call_direction in phone_data:
-            print(f"Using {call_direction} configuration")
+            logger.info(f"Using {call_direction} configuration")
             return phone_data[call_direction], call_direction
 
         # If not provided, try to determine from available keys
         if "inbound" in phone_data:
-            print("Using inbound configuration")
+            logger.info("Using inbound configuration")
             return phone_data["inbound"], "inbound"
         elif "outbound" in phone_data:
-            print("Using outbound configuration")
+            logger.info("Using outbound configuration")
             return phone_data["outbound"], "outbound"
 
-        print(f"No valid configuration found for phone: {phone_number}")
+        logger.info(f"No valid configuration found for phone: {phone_number}")
         return {}, None
 
 
@@ -149,13 +151,13 @@ async def get_agent_config_from_room(room_name: str, participant_metadata: Optio
     phone_number = await extract_phone_from_room_name(room_name)
 
     if not phone_number:
-        print(f"Could not extract phone number from room name: {room_name}")
+        logger.info(f"Could not extract phone number from room name: {room_name}")
         # Check for conf_id in participant_metadata
         if participant_metadata and isinstance(participant_metadata, dict):
             conf_id = participant_metadata.get("conf_id")
             direction = participant_metadata.get("direction")
             if conf_id:
-                print(
+                logger.info(
                     f"Found conf_id in metadata: {conf_id}, using it to fetch config")
                 try:
                     # Use a default phone number since it's required for JWT
@@ -167,7 +169,7 @@ async def get_agent_config_from_room(room_name: str, participant_metadata: Optio
                     )
                     return config
                 except Exception as e:
-                    print(f"Error getting agent config with conf_id: {e}")
+                    logger.info(f"Error getting agent config with conf_id: {e}")
         return {}
 
     # Extract call direction from metadata if available
@@ -175,27 +177,27 @@ async def get_agent_config_from_room(room_name: str, participant_metadata: Optio
     if participant_metadata and isinstance(participant_metadata, dict):
         call_direction = participant_metadata.get("direction")
         if call_direction:
-            print(f"Using call direction from metadata: {call_direction}")
+            logger.info(f"Using call direction from metadata: {call_direction}")
         else:
-            print("No call direction found in metadata, defaulting to inbound")
+            logger.info("No call direction found in metadata, defaulting to inbound")
             call_direction = "inbound"
 
     try:
         config, detected_direction = await fetch_agent_config_by_phone(phone_number, call_direction, room_name)
 
         if detected_direction and call_direction and detected_direction != call_direction:
-            print(
+            logger.info(
                 f"Warning: Detected direction ({detected_direction}) differs from metadata direction ({call_direction})")
 
         if config:
             # Log the configuration keys we've received to help with debugging
             config_keys = list(config.keys())
-            print(f"Received configuration with keys: {config_keys}")
+            logger.info(f"Received configuration with keys: {config_keys}")
             return config
         else:
-            print(
+            logger.info(
                 f"No configuration found for phone: {phone_number}, direction: {call_direction}")
             return {}
     except Exception as e:
-        print(f"Error getting agent config: {e}")
+        logger.info(f"Error getting agent config: {e}")
         return {}
