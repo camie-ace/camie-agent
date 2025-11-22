@@ -348,6 +348,10 @@ class Assistant(AbstractAgent):
         llm = ModelFactory.create_llm(self._agent_config.llm_config)
         tts = ModelFactory.create_tts(self._agent_config.tts_config)
 
+        logger.info(f"tts: {tts}")
+        logger.info(f"llm: {llm}")
+        logger.info(f"stt: {stt}")
+
         self._agent_session = AgentSession(
             stt=stt,
             llm=llm,
