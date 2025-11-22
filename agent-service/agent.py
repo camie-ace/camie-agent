@@ -356,8 +356,8 @@ class Assistant(AbstractAgent):
             stt=stt,
             llm=llm,
             tts=tts,
-            vad=silero.VAD.load(
-                min_silence_duration=self._voice_activity_detection_control or 0.05),
+            # vad=silero.VAD.load(
+            #     min_silence_duration=self._voice_activity_detection_control or 0.05),
             allow_interruptions=True,
         )
 
@@ -365,9 +365,9 @@ class Assistant(AbstractAgent):
         await self._agent_session.start(
             room=self._ctx.room,
             agent=self,
-            # room_input_options=RoomInputOptions(
-            #     noise_cancellation=self._audio_processor,
-            # ),
+            room_input_options=RoomInputOptions(
+                noise_cancellation=self._audio_processor,
+            ),
         )
 
         # Register voice activity handler if we're using silence detection
