@@ -175,7 +175,7 @@ Desktop.ini
 .env.*
 !.env.example
 !.env.template
-
+ 
 # Operating System Files
 .DS_Store
 Thumbs.db
