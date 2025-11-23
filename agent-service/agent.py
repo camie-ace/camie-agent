@@ -356,8 +356,8 @@ class Assistant(AbstractAgent):
             stt=stt,
             llm=llm,
             tts=tts,
-            # vad=silero.VAD.load(
-            #     min_silence_duration=self._voice_activity_detection_control or 0.05),
+            vad=silero.VAD.load(
+                min_silence_duration=self._voice_activity_detection_control or 0.05),
             allow_interruptions=True,
         )
 
