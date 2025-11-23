@@ -109,7 +109,7 @@ async def fetch_agent_config_by_phone(phone_number: str, call_direction: Optiona
         data = result.get("data", {})
 
         # For web calls with conf_id, the config is flat in data
-        if conf_id and data and not data.get("phone_number"):
+        if conf_id and data:
             logger.info(f"Using web call configuration (conf_id: {conf_id})")
             return data, call_direction
 
