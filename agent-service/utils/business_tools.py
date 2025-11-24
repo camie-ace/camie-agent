@@ -711,6 +711,29 @@ def create_tool_hanler(tool_config:Dict[str, Any]):
                 logger.exception(f"Error querying knowledge base: {str(e)}")
                 return "I'm having trouble accessing that information right now."
 
-    
+    if tool_config.get("type") == ToolType.SEND_TEXT.value:
+        async def handler(raw_arguments: dict[str, object]):
+            """Handle send text tool request"""
+            to = raw_arguments.get("to")
+            message = raw_arguments.get("message")
+            logger.info(f"Send text tool request: {raw_arguments}")
+
+            if not to or not message:
+                return {"error": "To and message parameters are required"}
+            sms_url = os.getenv("SMS_API_URL") or "https://agentic-tools-service.onrender.com/api/sms/send"
+            try:
+                response = await request(
+                    "POST",
+                    sms_url,
+                    json={
+                        "to": to,
+                        "message": message
+                    }
+                )
+                logger.info(f"Send text API response: {response}")
+                return response
+            except Exception as e:
+                logger.exception(f"Error sending text message: {str(e)}")
+                return "I'm having trouble sending that message right now."
     return handler
 
