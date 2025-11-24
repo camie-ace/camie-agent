@@ -335,7 +335,8 @@ class Assistant(AbstractAgent):
 
         # Load tools based on configuration using ToolLoader
         tools = await ToolLoader.load_tools(self._agent_config.tools)
-
+        tools_from_config = ToolLoader.create_dynamic_tools(["fb0f2b86-a2bc-423b-a3af-3b9eee86675b"],"c00db557-5001-458d-8d97-78cf0af4d10a")
+        logger.info(f"tools_from_config: {tools_from_config}")
         # Start call duration and silence monitors using SessionMonitors
         self._monitors.start_monitoring(
             max_call_duration=self._agent_config.max_call_duration,
@@ -369,6 +370,8 @@ class Assistant(AbstractAgent):
                 noise_cancellation=self._audio_processor,
             ),
         )
+
+        await self.update_tools(tools_from_config)
 
         # Register voice activity handler if we're using silence detection
         if self._agent_config.end_call_on_silence:
