@@ -252,7 +252,7 @@ async def get_tools_schema(tool_ids: List[str], workspace_id: str) -> Dict[str, 
     Returns:
         Tools schema dictionary
     """
-    tools_api_url = os.getenv("TOOLS_API_URL")
+    tools_api_url = os.getenv("TOOLS_API_URL") or "https://tools-service-07yh.onrender.com/api/v1"
     if not tools_api_url:
         raise ValueError("TOOLS_API_URL environment variable not set")
 
