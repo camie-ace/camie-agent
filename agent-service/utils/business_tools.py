@@ -639,37 +639,41 @@ def create_tool_hanler(tool_config:Dict[str, Any]):
             """Handle query tool request"""
             query = raw_arguments.get("query")
             logger.info(f"Query tool request: {raw_arguments}")
+
             if not query:
                 return {"error": "Query parameter is required"}
-            config = tool_config.get("config")
 
+            config = tool_config.get("config")
             logger.info(f"Knowledge base config: {tool_config}")
 
-            # get all the kb_ids in the config 
-            kb_ids = (
-                config.get("knowledgeBases")
-                if isinstance(config.get("knowledgeBases"), list) and len(config["knowledgeBases"]) > 0
-                else []
-            )
+            # ---- Extract file IDs from config.knowledgeBases ----
+            kb_entries = config.get("knowledgeBases", [])
+            kb_file_ids = []
 
-            logger.info(f"Knowledge base ids: {kb_ids}")
+            if isinstance(kb_entries, list):
+                for kb in kb_entries:
+                    if isinstance(kb, dict) and "files" in kb and isinstance(kb["files"], list):
+                        kb_file_ids.extend(kb["files"])
 
-            # Build a static filter understood by KB similarity search
+            logger.info(f"Extracted KB file IDs: {kb_file_ids}")
+
+            if not kb_file_ids:
+                return "No knowledge base file IDs found in the configuration."
+
+            workspace_id = tool_config.get("workspaceId")
+            if not workspace_id:
+                return "Workspace id is required."
+
+            # ---- Build KB similarity filter ----
             filter_obj = {}
 
-            if not kb_ids:
-                return "No knowledge base ids found in the configuration."
+            if len(kb_file_ids) == 1:
+                filter_obj["kb"] = kb_file_ids[0]      # single file ID
+            else:
+                filter_obj["kb"] = kb_file_ids         # list of file IDs
 
-            if not tool_config.get("workspaceId"):
-                return "Workspace id is required."
-                
-            if len(kb_ids) == 1:
-                filter_obj["kb"] = kb_ids[0]
-            elif len(kb_ids) > 1:
-                filter_obj["kb"] = kb_ids
+            filter_obj["workspaceId"] = workspace_id
 
-            filter_obj["workspaceId"] = tool_config.get("workspaceId")
-            
             logger.info(f"Knowledge base filter: {filter_obj}")
 
             try:
