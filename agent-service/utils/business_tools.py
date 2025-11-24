@@ -643,12 +643,16 @@ def create_tool_hanler(tool_config:Dict[str, Any]):
                 return {"error": "Query parameter is required"}
             config = tool_config.get("config")
 
+            logger.info(f"Knowledge base config: {config}")
+
             # get all the kb_ids in the config 
             kb_ids = (
                 config.get("knowledgeBases")
                 if isinstance(config.get("knowledgeBases"), list) and len(config["knowledgeBases"]) > 0
                 else []
             )
+
+            logger.info(f"Knowledge base ids: {kb_ids}")
 
             # Build a static filter understood by KB similarity search
             filter_obj = {}
@@ -666,6 +670,8 @@ def create_tool_hanler(tool_config:Dict[str, Any]):
 
             filter_obj["workspaceId"] = tool_config.get("workspace_id")
             
+            logger.info(f"Knowledge base filter: {filter_obj}")
+
             try:
                 kb_api_url = os.getenv("KNOWLEDGE_BASE_API_URL") or "https://airagent2-0-knowledge-base-tools.onrender.com/api/search/similarity"
                 if not kb_api_url:
@@ -678,10 +684,10 @@ def create_tool_hanler(tool_config:Dict[str, Any]):
                     "filter": filter_obj
                 }
 
+                logger.info(f"Knowledge base API request: {payload}")
+
                 response = requests.get(
                     kb_api_url, headers=headers, params=payload, timeout=int(tool_config.get("timeout", 10)))
-
-                logger.info(f"Knowledge base API request: {payload}")
                 logger.info(f"Knowledge base API response: {response}")
                 if response.status_code == 200:
                     result = response.json()
