@@ -101,8 +101,8 @@ class ToolLoader:
             props["query"] = {"type": "string", "description": "The query to search for"}
             required = required + ["query"]
         
-        if tool_type == ToolType.SEND_TEXT.value:
-            props["to"] = {"type": "string", "description": "The phone number to send the text to"}
+        elif tool_type == ToolType.SEND_TEXT.value:
+            props["to"] = {"type": "string", "description": "The phone number to send the text to in E.164 format"}
             required = required + ["to"]
             props["message"] = {"type": "string", "description": "The message to send"}
             required = required + ["message"]
