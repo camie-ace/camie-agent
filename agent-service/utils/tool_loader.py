@@ -136,6 +136,6 @@ class ToolLoader:
             if parsed_tool:
                 tool_handler = create_tool_hanler(tool_schema)
                 if tool_handler:
-                    tools_list.append(function_tool(tool_handler, parsed_tool))
+                    tools_list.append(function_tool(tool_handler, raw_schema=parsed_tool))
                 
         return tools_list
