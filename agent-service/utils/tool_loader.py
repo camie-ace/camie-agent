@@ -8,7 +8,7 @@ such as knowledge base, SMS, calendar integrations, etc.
 import os
 import logging
 from typing import List, Callable, Dict
-from utils.config_processor import ToolConfig
+from utils.config_processor import ToolConfig, ToolType
 from utils.business_tools import get_tool_by_name, create_tool_hanler
 from livekit.agents import function_tool
 from utils.api_client import get_tools_schema
