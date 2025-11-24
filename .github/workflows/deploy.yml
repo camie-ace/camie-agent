@@ -74,4 +74,6 @@ jobs:
           --set-string secrets.dotenv.JWT_SECRET='${{ secrets.JWT_SECRET }}' \
           --set-string secrets.dotenv.VOICE_CONFIG_TOKEN_URL='${{ secrets.DOTENV_VOICE_CONFIG_TOKEN_URL }}' \
           --set-string secrets.dotenv.CALL_HISTORY_ENDPOINT='${{ secrets.DOTENV_CALL_HISTORY_ENDPOINT }}' \
+          --set-string secrets.dotenv.TOOLS_API_URL='${{ secrets.DOTENV_TOOLS_API_URL }}' \
+          --set-string secrets.dotenv.KNOWLEDGE_BASE_API_URL='${{ secrets.DOTENV_KNOWLEDGE_BASE_API_URL }}' \
             --wait
