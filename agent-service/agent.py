@@ -334,9 +334,11 @@ class Assistant(AbstractAgent):
         await self._load_config()
 
         # Load tools based on configuration using ToolLoader
-        tools = await ToolLoader.load_tools(self._agent_config.tools)
-        tools_from_config = ToolLoader.create_dynamic_tools(["fb0f2b86-a2bc-423b-a3af-3b9eee86675b"],"c00db557-5001-458d-8d97-78cf0af4d10a")
-        logger.info(f"tools_from_config: {tools_from_config}")
+        # tools = await ToolLoader.load_tools(self._agent_config.tools)
+        tools_from_config = await ToolLoader.create_dynamic_tools([
+            "fb0f2b86-a2bc-423b-a3af-3b9eee86675b"
+        ], "c00db557-5001-458d-8d97-78cf0af4d10a")
+        logger.info(f"tools_from_config loaded: {len(tools_from_config)} tools")
         # Start call duration and silence monitors using SessionMonitors
         self._monitors.start_monitoring(
             max_call_duration=self._agent_config.max_call_duration,
