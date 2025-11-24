@@ -643,7 +643,7 @@ def create_tool_hanler(tool_config:Dict[str, Any]):
                 return {"error": "Query parameter is required"}
             config = tool_config.get("config")
 
-            logger.info(f"Knowledge base config: {config}")
+            logger.info(f"Knowledge base config: {tool_config}")
 
             # get all the kb_ids in the config 
             kb_ids = (
@@ -658,10 +658,10 @@ def create_tool_hanler(tool_config:Dict[str, Any]):
             filter_obj = {}
 
             if not kb_ids:
-                return None
+                return "No knowledge base ids found in the configuration."
 
             if not tool_config.get("workspace_id"):
-                return None
+                return "Workspace id is required."
                 
             if len(kb_ids) == 1:
                 filter_obj["kb"] = kb_ids[0]
