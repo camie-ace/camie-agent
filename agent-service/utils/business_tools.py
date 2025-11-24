@@ -711,5 +711,6 @@ def create_tool_hanler(tool_config:Dict[str, Any]):
                 logger.exception(f"Error querying knowledge base: {str(e)}")
                 return "I'm having trouble accessing that information right now."
 
+    
     return handler
 
