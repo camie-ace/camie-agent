@@ -635,7 +635,7 @@ def create_tool_hanler(tool_config:Dict[str, Any]):
     """
 
     if tool_config.get("type") == ToolType.QUERY.value:
-       async def handler(raw_arguments: dict[str, object], context):
+       async def handler(raw_arguments: dict[str, object]):
             """Handle query tool request"""
             query = raw_arguments.get("query")
             if not query:
