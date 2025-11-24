@@ -635,7 +635,7 @@ def create_tool_hanler(tool_config:Dict[str, Any]):
     """
 
     if tool_config.get("type") == ToolType.QUERY.value:
-        def handler(raw_arguments: dict[str, object], context):
+       async def handler(raw_arguments: dict[str, object], context):
             """Handle query tool request"""
             query = raw_arguments.get("query")
             if not query:
@@ -691,5 +691,5 @@ def create_tool_hanler(tool_config:Dict[str, Any]):
                 logger.exception(f"Error querying knowledge base: {str(e)}")
                 return "I'm having trouble accessing that information right now."
         
-        return handler
+    return handler
 
