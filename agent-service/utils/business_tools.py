@@ -646,7 +646,7 @@ def create_tool_hanler(tool_config:Dict[str, Any]):
             config = tool_config.get("config")
             logger.info(f"Knowledge base config: {tool_config}")
 
-            #   Extract file IDs from config.knowledgeBases  
+            # ---- Extract file IDs from config.knowledgeBases ----
             kb_entries = config.get("knowledgeBases", [])
             kb_file_ids = []
 
@@ -711,5 +711,5 @@ def create_tool_hanler(tool_config:Dict[str, Any]):
                 logger.exception(f"Error querying knowledge base: {str(e)}")
                 return "I'm having trouble accessing that information right now."
 
-            return handler
+    return handler
 
