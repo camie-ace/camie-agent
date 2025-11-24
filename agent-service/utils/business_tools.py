@@ -660,7 +660,7 @@ def create_tool_hanler(tool_config:Dict[str, Any]):
             if not kb_ids:
                 return "No knowledge base ids found in the configuration."
 
-            if not tool_config.get("workspace_id"):
+            if not tool_config.get("workspaceId"):
                 return "Workspace id is required."
                 
             if len(kb_ids) == 1:
@@ -668,7 +668,7 @@ def create_tool_hanler(tool_config:Dict[str, Any]):
             elif len(kb_ids) > 1:
                 filter_obj["kb"] = kb_ids
 
-            filter_obj["workspaceId"] = tool_config.get("workspace_id")
+            filter_obj["workspaceId"] = tool_config.get("workspaceId")
             
             logger.info(f"Knowledge base filter: {filter_obj}")
 
