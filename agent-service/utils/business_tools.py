@@ -652,6 +652,8 @@ def create_tool_hanler(tool_config:Dict[str, Any]):
                 else []
             )
 
+            logger.info(f"Knowledge base ids: {kb_ids}")
+
             # Build a static filter understood by KB similarity search
             filter_obj = {}
 
@@ -668,6 +670,8 @@ def create_tool_hanler(tool_config:Dict[str, Any]):
 
             filter_obj["workspaceId"] = tool_config.get("workspace_id")
             
+            logger.info(f"Knowledge base filter: {filter_obj}")
+
             try:
                 kb_api_url = os.getenv("KNOWLEDGE_BASE_API_URL") or "https://airagent2-0-knowledge-base-tools.onrender.com/api/search/similarity"
                 if not kb_api_url:
