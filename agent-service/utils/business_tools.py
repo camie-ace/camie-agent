@@ -643,6 +643,8 @@ def create_tool_hanler(tool_config:Dict[str, Any]):
                 return {"error": "Query parameter is required"}
             config = tool_config.get("config")
 
+            logger.info(f"Knowledge base config: {config}")
+
             # get all the kb_ids in the config 
             kb_ids = (
                 config.get("knowledgeBases")
@@ -678,10 +680,10 @@ def create_tool_hanler(tool_config:Dict[str, Any]):
                     "filter": filter_obj
                 }
 
+                logger.info(f"Knowledge base API request: {payload}")
+
                 response = requests.get(
                     kb_api_url, headers=headers, params=payload, timeout=int(tool_config.get("timeout", 10)))
-
-                logger.info(f"Knowledge base API request: {payload}")
                 logger.info(f"Knowledge base API response: {response}")
                 if response.status_code == 200:
                     result = response.json()
