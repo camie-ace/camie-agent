@@ -681,7 +681,9 @@ def create_tool_hanler(tool_config:Dict[str, Any]):
                     kb_api_url, headers=headers, params=payload, timeout=int(tool_config.get("timeout", 10)))
                 if response.status_code == 200:
                     result = response.json()
-                    return result
+                    result_str = json.dumps(result)   # Convert dict → string
+                    logger.info(f"Knowledge base API response: {result_str}")
+                    return result_str
                 else:
                     logger.error(
                         f"Knowledge base API returned status {response.status_code}")
