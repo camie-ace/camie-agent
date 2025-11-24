@@ -714,36 +714,71 @@ def create_tool_hanler(tool_config:Dict[str, Any]):
     elif tool_config.get("type") == ToolType.SEND_TEXT.value:
         async def handler(raw_arguments: dict[str, object]):
             """Handle send text tool request"""
+
             to = raw_arguments.get("to")
             message = raw_arguments.get("message")
             logger.info(f"Send text tool request: {raw_arguments}")
 
             if not to or not message:
-                return {"error": "To and message parameters are required"}
-            sms_url = os.getenv("SMS_API_URL") or "https://agentic-tools-service.onrender.com/api/sms/send"
+                return {"error": "Both 'to' and 'message' parameters are required."}
+
+            sms_url = os.getenv("SMS_API_URL") or \
+                "https://agentic-tools-service.onrender.com/api/sms/send"
 
             config = tool_config.get("config")
             from_number = config.get("metadata", {}).get("from")
 
             if not from_number:
-                return {"error": "From number is required in tool config"}
-                
-            logger.info({"to": to, "message": message, "from": from_number})
+                return {"error": "From number is required in tool config."}
+
+            workspace_id = tool_config.get("workspaceId")
+            if not workspace_id:
+                return {"error": "Workspace id is required in tool config."}
+
+            # Correct logging
+            logger.info({
+                "to": to,
+                "message": message,
+                "from": from_number
+            })
+
+            # Build outbound payload
+            payload = {
+                "to": to,
+                "message": message,
+                "from": from_number
+            }
+            logger.info(f"SMS payload: {payload}")
 
             try:
                 response = requests.post(
                     sms_url,
-                    json={
-                        "to": to,
-                        "message": message,
-                        "from": from_number
+                    json=payload,    
+                    headers={
+                        "x-workspace-id": workspace_id,
+                        "Content-Type": "application/json"
                     },
                     timeout=int(tool_config.get("timeout", 10))
                 )
-                logger.info(f"Send text API response: {response}")
-                return response
-            except Exception as e:
-                logger.exception(f"Error sending text message: {str(e)}")
-                return "I'm having trouble sending that message right now."
+
+                logger.info(f"Send text API response: {response.status_code}")
+
+                # Return useful API result
+                if response.status_code == 200:
+                    return {"message": "SMS sent successfully"}
+
+                return {
+                    "error": f"SMS API returned status {response.status_code}",
+                    "details": response.text
+                }
+
+            except requests.exceptions.Timeout:
+                logger.exception("SMS API timeout")
+                return {"error": "The SMS service timed out. Please try again."}
+
+            except requests.exceptions.RequestException as e:
+                logger.exception(f"SMS request failed: {e}")
+                return {"error": "Failed to send the SMS message.", "details": str(e)}
+    
     return handler
 
