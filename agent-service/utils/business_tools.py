@@ -666,7 +666,7 @@ def create_tool_hanler(tool_config:Dict[str, Any]):
             filter_obj["workspaceId"] = tool_config.get("workspace_id")
             
             try:
-                kb_api_url = os.getenv("KNOWLEDGE_BASE_API_URL")
+                kb_api_url = os.getenv("KNOWLEDGE_BASE_API_URL") or "https://airagent2-0-knowledge-base-tools.onrender.com/api/search/similarity"
                 if not kb_api_url:
                     logger.error("KNOWLEDGE_BASE_API_URL environment variable not set")
                     return "I can't access the knowledge base at the moment."
