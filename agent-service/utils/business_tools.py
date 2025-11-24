@@ -638,6 +638,7 @@ def create_tool_hanler(tool_config:Dict[str, Any]):
        async def handler(raw_arguments: dict[str, object]):
             """Handle query tool request"""
             query = raw_arguments.get("query")
+            logger.info(f"Query tool request: {raw_arguments}")
             if not query:
                 return {"error": "Query parameter is required"}
             config = tool_config.get("config")

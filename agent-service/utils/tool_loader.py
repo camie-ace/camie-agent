@@ -92,25 +92,35 @@ class ToolLoader:
 
         return tools_list
 
-    def _parse_schema(schema: Dict[str, any]) -> Dict[str, any]:
-        """
-        Parse the tools schema to extract function_tool decorator arguments
 
-        Args:
-            schema: The tools schema dictionary
+    # this method will handle the parameters for fields that have static parameters
+    def _augment_parameters_for_type(params: Dict[str, any], tool_type: str) -> Dict[str, any]:
+        props = params.get("properties", {}) or {}
+        required = params.get("required", []) or []
+        if tool_type == ToolType.QUERY.value:
+            props["query"] = {"type": "string", "description": "The query to search for"}
+            required = required + ["query"]
 
-        Returns:
-            parsed function_tool arguments
-        """
+        params["properties"] = props
+        params["required"] = required
+
+        return params
+
+    def _parse_schema(schema: Dict[str, any], tool_type: str) -> Dict[str, any]:
         parsed_tool = None
         tool_func = schema.get("function")
         if tool_func:
+            params = tool_func.get("parameters", {}) or {}
+            props = params.get("properties", {}) or {}
+            required = params.get("required", []) or []
+            params["properties"] = props
+            params["required"] = required
+            params = ToolLoader._augment_parameters_for_type(params, tool_type)
             parsed_tool = {
                 "name": tool_func.get("name", ""),
                 "description": tool_func.get("description", ""),
-                "parameters": tool_func.get("parameters", {})
+                "parameters": params
             }
-
         return parsed_tool
 
     
@@ -132,7 +142,7 @@ class ToolLoader:
             return tools_list
         
         for tool_schema in list_of_tools_schema.get("tools", []):
-            parsed_tool = ToolLoader._parse_schema(tool_schema.get("config"))
+            parsed_tool = ToolLoader._parse_schema(tool_schema.get("config"), tool_schema.get("type"))
             if parsed_tool:
                 tool_handler = create_tool_hanler(tool_schema)
                 if tool_handler:
