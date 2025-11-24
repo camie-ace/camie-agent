@@ -9,6 +9,7 @@ from typing import Dict, Any
 from dataclasses import dataclass
 from typing import Optional
 import logging
+from enum import Enum
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +21,11 @@ class ToolConfig:
     url: Optional[str] = None
     metadata: Optional[Dict[str, Any]] = None
 
+class ToolType(Enum):
+    """Enumeration of tool types"""
+    QUERY = "query"
+    END_CALL = "end_call"
+    SEND_TEXT = "send_text"
 
 class ConfigProcessor:
     """Processes and prepares agent configuration from raw API responses"""

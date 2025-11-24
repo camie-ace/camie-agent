@@ -243,3 +243,30 @@ async def send_call_history(call_data: Dict[str, Any]) -> Dict[str, Any]:
     except Exception as e:
         print(f"Error sending call history data: {e}")
         return {"error": True, "message": str(e)}
+
+
+async def get_tools_schema(tool_ids: List[str], workspace_id: str) -> Dict[str, Any]:
+    """
+    Fetch the tools schema from the API endpoint
+
+    Returns:
+        Tools schema dictionary
+    """
+    tools_api_url = os.getenv("TOOLS_API_URL")
+    if not tools_api_url:
+        raise ValueError("TOOLS_API_URL environment variable not set")
+
+    endpoint = f"{tools_api_url}/tools/schema"
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(endpoint, params={"tool_ids": tool_ids, "workspace_id": workspace_id}) as response:
+                if response.status == 200:
+                    return await response.json()
+                else:
+                    error_text = await response.text()
+                    print(
+                        f"Failed to fetch tools schema: {response.status} - {error_text}")
+                    return {"error": True, "status_code": response.status, "message": error_text}
+    except Exception as e:
+        print(f"Error fetching tools schema: {e}")
+        return {"error": True, "message": str(e)}

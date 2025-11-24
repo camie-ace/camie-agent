@@ -9,7 +9,9 @@ import os
 import logging
 from typing import List, Callable, Dict
 from utils.config_processor import ToolConfig
-from utils.business_tools import get_tool_by_name
+from utils.business_tools import get_tool_by_name, create_tool_hanler
+from livekit.agents import function_tool
+from utils.api_client import get_tools_schema
 
 logger = logging.getLogger(__name__)
 
@@ -88,4 +90,52 @@ class ToolLoader:
                         tools_list.append(tool)
                 logger.info("Loaded Google Calendar tools")
 
+        return tools_list
+
+    def _parse_schema(schema: Dict[str, any]) -> Dict[str, any]:
+        """
+        Parse the tools schema to extract function_tool decorator arguments
+
+        Args:
+            schema: The tools schema dictionary
+
+        Returns:
+            parsed function_tool arguments
+        """
+        parsed_tool = None
+        tool_func = schema.get("function")
+        if tool_func:
+            parsed_tool = {
+                "name": tool_func.get("name", ""),
+                "description": tool_func.get("description", ""),
+                "parameters": tool_func.get("parameters", {})
+            }
+
+        return parsed_tool
+
+    
+    @staticmethod
+    async def create_dynamic_tools(tool_configs: list[str], workspace_id: str) -> List[Callable]:
+        """
+        Create dynamic tools based on configuration
+
+        Args:
+            tool_configs: Array of tool configuration  uuid strings
+
+        Returns:
+            List of callable tool functions
+        """
+        tools_list = []
+        list_of_tools_schema = await get_tools_schema(tool_configs, workspace_id)
+
+        if (list_of_tools_schema.get("error")):
+            return tools_list
+        
+        for tool_schema in list_of_tools_schema.get("tools", []):
+            parsed_tool = ToolLoader._parse_schema(tool_schema.get("config"))
+            if parsed_tool:
+                tool_handler = create_tool_hanler(tool_schema)
+                if tool_handler:
+                    tools_list.append(function_tool(tool_handler, parsed_tool))
+                
         return tools_list

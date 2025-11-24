@@ -8,6 +8,7 @@ import logging
 import os
 import requests
 import json
+from utils.config_processor import ToolConfig, ToolType
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -620,3 +621,75 @@ def get_tool_by_name(tool_name: str) -> Optional[Callable]:
     }
 
     return tools_map.get(tool_name)
+
+
+def create_tool_hanler(tool_config:Dict[str, Any]):
+    """
+    Create a tool handler function based on the tool configuration
+
+    Args:
+        tool_config: Dictionary containing tool configuration
+
+    Returns:
+        Callable function that handles the tool request
+    """
+
+    if tool_config.get("type") == ToolType.QUERY.value:
+        def handler(raw_arguments: dict[str, object], context: RunContext):
+            """Handle query tool request"""
+            query = raw_arguments.get("query")
+            if not query:
+                return {"error": "Query parameter is required"}
+            config = tool_config.get("config")
+
+            # get all the kb_ids in the config 
+            kb_ids = (
+                config.get("knowledgeBases")
+                if isinstance(config.get("knowledgeBases"), list) and len(config["knowledgeBases"]) > 0
+                else []
+            )
+
+            # Build a static filter understood by KB similarity search
+            filter_obj = {}
+
+            if not kb_ids:
+                return None
+
+            if not tool_config.get("workspace_id"):
+                return None
+                
+            if len(kb_ids) == 1:
+                filter_obj["kb"] = kb_ids[0]
+            elif len(kb_ids) > 1:
+                filter_obj["kb"] = kb_ids
+
+            filter_obj["workspaceId"] = tool_config.get("workspace_id")
+            
+            try:
+                kb_api_url = os.getenv("KNOWLEDGE_BASE_API_URL")
+                if not kb_api_url:
+                    logger.error("KNOWLEDGE_BASE_API_URL environment variable not set")
+                    return "I can't access the knowledge base at the moment."
+
+                headers = {"Content-Type": "application/json"}
+                payload = {
+                    "query": query,
+                    "filter": filter_obj
+                }
+
+                response = requests.get(
+                    kb_api_url, headers=headers, params=payload, timeout=int(tool_config.get("timeout", 10)))
+                if response.status_code == 200:
+                    result = response.json()
+                    return result
+                else:
+                    logger.error(
+                        f"Knowledge base API returned status {response.status_code}")
+                    return "I encountered an issue when searching for that information."
+
+            except Exception as e:
+                logger.exception(f"Error querying knowledge base: {str(e)}")
+                return "I'm having trouble accessing that information right now."
+        
+        return handler
+
