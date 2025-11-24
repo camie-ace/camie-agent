@@ -658,10 +658,10 @@ def create_tool_hanler(tool_config:Dict[str, Any]):
             filter_obj = {}
 
             if not kb_ids:
-                return None
+                return "No knowledge base ids found in the configuration."
 
             if not tool_config.get("workspace_id"):
-                return None
+                return "Workspace id is required."
                 
             if len(kb_ids) == 1:
                 filter_obj["kb"] = kb_ids[0]
