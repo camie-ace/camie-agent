@@ -635,7 +635,7 @@ def create_tool_hanler(tool_config:Dict[str, Any]):
     """
 
     if tool_config.get("type") == ToolType.QUERY.value:
-       async def handler(raw_arguments: dict[str, object]):
+        async def handler(raw_arguments: dict[str, object]):
             """Handle query tool request"""
             query = raw_arguments.get("query")
             logger.info(f"Query tool request: {raw_arguments}")
@@ -646,7 +646,7 @@ def create_tool_hanler(tool_config:Dict[str, Any]):
             config = tool_config.get("config")
             logger.info(f"Knowledge base config: {tool_config}")
 
-            # ---- Extract file IDs from config.knowledgeBases ----
+            #   Extract file IDs from config.knowledgeBases  
             kb_entries = config.get("knowledgeBases", [])
             kb_file_ids = []
 
@@ -664,48 +664,52 @@ def create_tool_hanler(tool_config:Dict[str, Any]):
             if not workspace_id:
                 return "Workspace id is required."
 
-            # ---- Build KB similarity filter ----
-            filter_obj = {}
-
-            if len(kb_file_ids) == 1:
-                filter_obj["kb"] = kb_file_ids[0]      # single file ID
-            else:
-                filter_obj["kb"] = kb_file_ids         # list of file IDs
-
-            filter_obj["workspaceId"] = workspace_id
+            #  Build KB similarity filter 
+            filter_obj = {
+                "kb": kb_file_ids[0] if len(kb_file_ids) == 1 else kb_file_ids,
+                "workspaceId": workspace_id
+            }
 
             logger.info(f"Knowledge base filter: {filter_obj}")
 
             try:
-                kb_api_url = os.getenv("KNOWLEDGE_BASE_API_URL") or "https://airagent2-0-knowledge-base-tools.onrender.com/api/search/similarity"
-                if not kb_api_url:
-                    logger.error("KNOWLEDGE_BASE_API_URL environment variable not set")
-                    return "I can't access the knowledge base at the moment."
+                kb_api_url = (
+                    os.getenv("KNOWLEDGE_BASE_API_URL")
+                    or "https://airagent2-0-knowledge-base-tools.onrender.com/api/search/similarity"
+                )
 
                 headers = {"Content-Type": "application/json"}
-                payload = {
+
+                params = {
                     "query": query,
-                    "filter": filter_obj
+                    "filter": json.dumps(filter_obj)  
                 }
 
-                logger.info(f"Knowledge base API request: {payload}")
+                logger.info(f"Knowledge base API request params: {params}")
 
                 response = requests.get(
-                    kb_api_url, headers=headers, params=payload, timeout=int(tool_config.get("timeout", 10)))
+                    kb_api_url,
+                    headers=headers,
+                    params=params,
+                    timeout=int(tool_config.get("timeout", 10))
+                )
+
                 logger.info(f"Knowledge base API response: {response}")
+
                 if response.status_code == 200:
                     result = response.json()
-                    result_str = json.dumps(result)   # Convert dict → string
+                    result_str = json.dumps(result)
                     logger.info(f"Knowledge base API response: {result_str}")
                     return result_str
                 else:
                     logger.error(
-                        f"Knowledge base API returned status {response.status_code}")
+                        f"Knowledge base API returned status {response.status_code}"
+                    )
                     return "I encountered an issue when searching for that information."
 
             except Exception as e:
                 logger.exception(f"Error querying knowledge base: {str(e)}")
                 return "I'm having trouble accessing that information right now."
-        
-    return handler
+
+            return handler
 
