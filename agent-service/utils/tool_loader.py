@@ -106,6 +106,18 @@ class ToolLoader:
             required = required + ["to"]
             props["message"] = {"type": "string", "description": "The message to send"}
             required = required + ["message"]
+        
+        elif tool_type == ToolType.GOOGLE_CALENDAR.value:
+            props["summary"] = {"type": "string", "description": "Summary of the event"}
+            required = required + ["summary"]
+            props["description"] = {"type": "string", "description": "Description of the event"}
+            props["startTime"] = {"type": "string", "description": "Start time of the event in ISO 8601 format"}
+            required = required + ["startTime"]
+            props["endTime"] = {"type": "string", "description": "End time of the event in ISO 8601 format"}
+            required = required + ["endTime"]
+            props["timeZoneId"] = {"type": "string", "description": "Time zone ID for the event"}
+            props["email"] = {"type": "string", "description": "Email of the attendee"}
+            required = required + ["email"]
 
         params["properties"] = props
         params["required"] = required

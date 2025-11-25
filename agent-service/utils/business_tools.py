@@ -780,5 +780,84 @@ def create_tool_hanler(tool_config:Dict[str, Any]):
                 logger.exception(f"SMS request failed: {e}")
                 return {"error": "Failed to send the SMS message.", "details": str(e)}
     
+    elif tool_config.get("type") == ToolType.GOOGLE_CALENDAR.value:
+        async def handler(raw_arguments: dict[str, object]):
+            summary = raw_arguments.get("summary")
+            description = raw_arguments.get("description")
+            start_time = raw_arguments.get("startTime")
+            end_time = raw_arguments.get("endTime")
+            time_zone = raw_arguments.get("timeZoneId")
+            email = raw_arguments.get("email")
+            logger.info(f"Google Calendar tool request: {raw_arguments}")
+
+            if not summary or not start_time or not end_time or not email:
+                return {"error": "Missing required parameters: 'summary', 'startTime', 'endTime', and 'email' are required."}
+
+            config = tool_config.get("config", {})
+            metadata = config.get("metadata", {}) if isinstance(config, dict) else {}
+            connection_id = metadata.get("google_connection_id")
+            calendar_id = metadata.get("google_calendar_id")
+
+            workspace_id = tool_config.get("workspaceId")
+            if not workspace_id:
+                return {"error": "Workspace id is required in tool config."}
+
+            if not connection_id or not calendar_id:
+                return {"error": "Google connection id and calendar id are required in tool config metadata."}
+
+            api_url = (config.get("url") if isinstance(config, dict) else None) or os.getenv("GCAL_API_URL") or "https://agentic-tools-service.onrender.com/api/google-calendar/events/"
+            if not api_url:
+                return {"error": "Google Calendar API URL is not configured."}
+
+            payload = {
+                "summary": summary,
+                "description": description,
+                "startTime": start_time,
+                "endTime": end_time,
+                "timeZoneId": time_zone,
+                "email": email
+            }
+            logger.info(f"Google Calendar payload: {payload}")
+
+            params = {
+                "id": connection_id,
+                "calendarId": calendar_id
+            }
+            logger.info(f"Google Calendar query params: {params}")
+
+            try:
+                response = requests.post(
+                    api_url,
+                    json=payload,
+                    headers={
+                        "x-workspace-id": workspace_id,
+                        "Content-Type": "application/json"
+                    },
+                    params=params,
+                    timeout=int(tool_config.get("timeout", 10))
+                )
+
+                logger.info(f"Google Calendar API response: {response.status_code}")
+
+                if response.status_code == 200:
+                    try:
+                        data = response.json()
+                    except Exception:
+                        data = {"message": response.text}
+                    return data if isinstance(data, dict) else {"message": "Event created successfully"}
+
+                return {
+                    "error": f"Google Calendar API returned status {response.status_code}",
+                    "details": response.text
+                }
+
+            except requests.exceptions.Timeout:
+                logger.exception("Google Calendar API timeout")
+                return {"error": "The Google Calendar service timed out. Please try again."}
+
+            except requests.exceptions.RequestException as e:
+                logger.exception(f"Google Calendar request failed: {e}")
+                return {"error": "Failed to create the calendar event.", "details": str(e)}
+    
     return handler
 

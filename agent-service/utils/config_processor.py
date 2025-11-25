@@ -26,6 +26,7 @@ class ToolType(Enum):
     QUERY = "query"
     END_CALL = "end_call"
     SEND_TEXT = "send_text"
+    GOOGLE_CALENDAR = "google_calendar"
 
 class ConfigProcessor:
     """Processes and prepares agent configuration from raw API responses"""
