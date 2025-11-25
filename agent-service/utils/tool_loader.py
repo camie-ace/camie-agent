@@ -12,6 +12,7 @@ from utils.config_processor import ToolConfig, ToolType
 from utils.business_tools import get_tool_by_name, create_tool_hanler
 from livekit.agents import function_tool
 from utils.api_client import get_tools_schema
+from livekit import agents
 
 logger = logging.getLogger(__name__)
 
@@ -143,7 +144,7 @@ class ToolLoader:
 
     
     @staticmethod
-    async def create_dynamic_tools(tool_configs: list[str], workspace_id: str) -> List[Callable]:
+    async def create_dynamic_tools(tool_configs: list[str], workspace_id: str, ctx: agents.JobContext) -> List[Callable]:
         """
         Create dynamic tools based on configuration
 
@@ -162,7 +163,7 @@ class ToolLoader:
         for tool_schema in list_of_tools_schema.get("tools", []):
             parsed_tool = ToolLoader._parse_schema(tool_schema.get("config"), tool_schema.get("type"))
             if parsed_tool:
-                tool_handler = create_tool_hanler(tool_schema)
+                tool_handler = create_tool_hanler(tool_schema, ctx)
                 if tool_handler:
                     tools_list.append(function_tool(tool_handler, raw_schema=parsed_tool))
                 
