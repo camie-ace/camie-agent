@@ -342,7 +342,7 @@ class Assistant(AbstractAgent):
         logger.info(f"workspace_id: {self._raw_config.get('workspace_id')}")
         logger.info(f"raw_config: {self._raw_config}")
         
-        tools_from_config = await ToolLoader.create_dynamic_tools(self._raw_config.get("tools_list", []), self._raw_config.get("workspace_id"))
+        tools_from_config = await ToolLoader.create_dynamic_tools(self._raw_config.get("tools_list", []), self._raw_config.get("workspace_id"), self.ctx)
         logger.info(f"tools_from_config loaded: {len(tools_from_config)} tools")
         # Start call duration and silence monitors using SessionMonitors
         self._monitors.start_monitoring(

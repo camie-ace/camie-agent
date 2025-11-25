@@ -9,6 +9,7 @@ import os
 import requests
 import json
 from utils.config_processor import ToolConfig, ToolType
+from livekit import agents
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -623,7 +624,7 @@ def get_tool_by_name(tool_name: str) -> Optional[Callable]:
     return tools_map.get(tool_name)
 
 
-def create_tool_hanler(tool_config:Dict[str, Any]):
+def create_tool_hanler(tool_config:Dict[str, Any], ctx: agents.JobContext):
     """
     Create a tool handler function based on the tool configuration
 
@@ -859,5 +860,11 @@ def create_tool_hanler(tool_config:Dict[str, Any]):
                 logger.exception(f"Google Calendar request failed: {e}")
                 return {"error": "Failed to create the calendar event.", "details": str(e)}
     
+    elif tool_config.get("type") == ToolType.END_CALL.value:
+        async def handler(raw_arguments: dict[str, object]):
+            """End the current call"""
+            ctx.delete_room()
+            return {"message": "Call ended successfully"}
+
     return handler
 
